@@ -1,8 +1,8 @@
-name: non_isothermal #name of experiment type
+name: TL_rhoEs #name of experiment type
 #temperature
 T_start: 0 #Celsius
 T_end: 1000
-T_rate: [0.1,1,10] #kelvin/second
+T_rate: [5] #kelvin/second
 #sims
 sims: 2
 N0: 1e9 #number of electrons

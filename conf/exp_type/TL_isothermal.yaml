@@ -1,12 +1,13 @@
 name: isothermal #name of experiment type
+#temp
 T_start: 220 #Celsius
-A_isoth:  0.20 #s^-1
-B: 1e12 #s^-1 guess
-rho_prime: 0.007
+#sims
 sims: 10
 N0: 1000 #number of electrons
-s_tun: 1e12 #guess
+#distances
 distance: 2
 dr_prime: 0.02 #distance change
-dt: 0.1 #s
+#time
 duration: 500 #s
+dt: 0.1 #s
+
