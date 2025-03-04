@@ -1,0 +1,16 @@
+name: CW_IRSL #optically stimulated luminescence curves 2019MCPaper
+loop_type: optic
+#temperature
+T_start: [0] #Celsius
+T_end: [800]
+T_rate: [0] #kelvin/second
+#sims
+sims: 2
+N0: 1e9 #number of electrons
+#distance
+distance: 2
+dr_prime: 0.02 #distance change
+#time
+dt: 0.1 #s low to avoid high P's
+duration: 1000 #s
+

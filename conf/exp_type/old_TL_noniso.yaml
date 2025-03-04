@@ -1,9 +1,9 @@
 name: non_isothermal #name of experiment type
 loop_type: temp
 #temperature
-T_start: [0] #Celsius
-T_end: [800]
-T_rate: [0.1,1,5,10,20] #kelvin/second
+T_start: 0 #Celsius
+T_end: 800
+T_rate: [1] #kelvin/second
 #sims
 sims: 2
 N0: 1e9 #number of electrons

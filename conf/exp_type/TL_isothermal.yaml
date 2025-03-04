@@ -1,6 +1,7 @@
 name: isothermal #name of experiment type
+loop_type: time
 #temp
-T_start: 220 #Celsius
+T_start: [220] #Celsius
 #sims
 sims: 10
 N0: 1000 #number of electrons
