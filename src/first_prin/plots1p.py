@@ -7,24 +7,76 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sim1p as sim
 import pandas as pd
+from scipy.interpolate import make_interp_spline
 
+def running_mean(data: np.ndarray, window_size: int = 5) -> np.ndarray:
+    """
+    Smooth `data` by computing the average of every `window_size` points.
+    The result has fewer points if mode='valid'. 
+    Use mode='same' if you want the same length as the original data.
+    """
+    kernel = np.ones(window_size) / window_size
+    # Convolution-based smoothing
+    smoothed = np.convolve(data, kernel, mode='valid')
+    return smoothed
 
-def TL_lum_iso(cfg: DictConfig, x_ax, Lums) -> None:
-    mc = cfg["exp_type_fp"]
-
+def TL_temp(cfg: DictConfig, x_ax, Lums) -> None:
+    mc = cfg.exp_type_fp
 
     #output dirs
-    output_dir_local = os.path.join(os.getcwd(), f"results/figs1p/isoTL_C_{mc.T_start}")
-    output_dir_hydra = os.path.join(PROJECT_ROOT, f"results/figs1p/isoTL_C_{mc.T_start}")
+    output_dir_hydra = os.path.join(os.getcwd(), f"results/figs1p/TL/")
+    output_dir_local = os.path.join(PROJECT_ROOT, f"results/figs1p/TL/")
     os.makedirs(output_dir_local, exist_ok=True)
     os.makedirs(output_dir_hydra, exist_ok=True)
 
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(Lums)))
+
+    n_colors = Lums.shape[-1]
+    colors = plt.cm.rainbow(np.linspace(0, 1, n_colors))
+    plt.clf()
+    window_size = 30
+    for i in range(Lums.shape[-1]):
+        lum_across_sims = np.mean(Lums[:,:,i], axis=1) #mean across nsims for each temperature
+        lum_across_sims_normalized = lum_across_sims / np.max(lum_across_sims)
+        # Suppose lum_across_sims is your raw signal array
+        smoothed_lum = running_mean(lum_across_sims, window_size=window_size)
+
+        # If using 'valid' mode, you’ll need to adjust the x_ax to match lengths
+        x_smoothed = x_ax[(window_size - 1) // 2 : -(window_size // 2)]
+
+        # Suppose x_ax and lum_across_sims are your data
+        #x_new = np.linspace(x_ax.min(), x_ax.max(), 300)  # 300 points
+        #spl = make_interp_spline(x_ax, lum_across_sims, k=3)
+        #lum_smooth = spl(x_new)
+
+        #` Generate an array of colors using the "rainbow" colormap
+        plt.plot(x_smoothed, smoothed_lum,color=colors[i], linewidth=0.5, label=f'{mc.T_rate[i]}', linestyle='--')
+    plt.text(0.6,0.9,"Heating Rate ($^{\circ}C.s^{-1}$)",
+    transform=plt.gca().transAxes,   # interpret x,y as axes coords
+    fontsize=12,)
+    
+    plt.xlabel("Temperature ($^{\circ}C$)")
+    plt.ylabel("Intensity ($^{\circ}C^{-1}$)")
+    plt.legend(bbox_to_anchor=(0.7, 0.9), loc='upper left')
+    # Save your plot in the new directory
+    plt.savefig(os.path.join(output_dir_local, f"TL_dT{mc.T_rate}.svg"))
+    plt.savefig(os.path.join(output_dir_hydra, f"TL_dT{mc.T_rate}.svg"))
+
+
+def TL_lum_iso(cfg: DictConfig, x_ax, Lums) -> None:
+    mc = cfg.exp_type_fp
+
+    #output dirs
+    output_dir_local = os.path.join(os.getcwd(), f"results/figs1p/isoTL/")
+    output_dir_hydra = os.path.join(PROJECT_ROOT, f"results/figs1p/isoTL/")
+    os.makedirs(output_dir_local, exist_ok=True)
+    os.makedirs(output_dir_hydra, exist_ok=True)
+
+    colors = plt.cm.rainbow(np.linspace(0, 1, Lums.shape[-1]))
     plt.clf()
     # Create two-subplot figure: 1 row, 2 columns
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
-    for i in range(len(Lums)):
-        lum_across_sims = np.mean(Lums[:,i], axis=1)
+    for i in range(Lums.shape[-1]):
+        lum_across_sims = np.mean(Lums[:,:,i], axis=1) #mean across nsims for each temperature
         lum_across_sims_normalized = lum_across_sims / np.max(lum_across_sims)
 
         # Plot unnormalized on the first subplot
@@ -58,8 +110,8 @@ def TL_lum_iso(cfg: DictConfig, x_ax, Lums) -> None:
     plt.tight_layout()
 
     # Save figure
-    plt.savefig(os.path.join(output_dir_local, "Time_Lum.svg"))
-    plt.savefig(os.path.join(output_dir_hydra, "Time_Lum.svg"))
+    plt.savefig(os.path.join(output_dir_local, f"Time_Lum_C_{mc.T_start}.svg"))
+    plt.savefig(os.path.join(output_dir_hydra, f"Time_Lum_C_{mc.T_start}.svg"))
     plt.close(fig)
 
 
@@ -133,9 +185,9 @@ def CW_IRSL(cfg:DictConfig,Lums:list,counts:list) -> None:
 
 def main(cfg: DictConfig,x_ax,lum_sec) -> None:
     mc = cfg["exp_type_fp"]
-    if mc.exp_type == "temp":
+    if mc.exp_type == "TL":
         print("Plotting for temperature loop")
-        #TL_lum_noniso(configs,lums,counts)
+        TL_temp(cfg,x_ax,lum_sec)
         #TL_lum_rhoEs(configs,lums,counts)
         #TL_lum_iso(configs,lums,counts)
         #OSL_A(configs,lums,counts)
@@ -147,20 +199,22 @@ def main(cfg: DictConfig,x_ax,lum_sec) -> None:
     print("Done!")
 
 @hydra.main(version_base=None, config_path=CONFIG_DIR, config_name="config_fp")
-def main_solo(cfg: DictConfig,x_ax,lum_sec) -> None:
-    mc = cfg["exp_type_fp"]
-    lums, counts,configs = sim.general_run(cfg)
-    if mc == cfg["exp_type_fp"] == "temp":
+def main_solo(cfg: DictConfig) -> None:
+    print("Starting simulation")
+    x_ax, lum_sec = sim.main(cfg)
+    mc = cfg.exp_type_fp
+    if mc == mc.exp_type == "TL":
         print("Plotting for temperature loop")
-        #TL_lum_noniso(configs,lums,counts)
+        TL_temp(cfg,lums,counts)
         #TL_lum_rhoEs(configs,lums,counts)
         #TL_lum_iso(configs,lums,counts)
         #OSL_A(configs,lums,counts)
-    elif mc == cfg["exp_type_fp"] == "iso":
-        TL_lum_iso(configs,x_ax,lum_sec)
-    elif mc == cfg["exp_type_fp"] == "optic":
+    elif mc.exp_type == "iso":
+        TL_lum_iso(cfg,x_ax,lum_sec)
+    elif mc.exp_type == "optic":
         OSL_A(configs,lums,counts)
         CW_IRSL(configs,lums,counts)
     print("Done!")
+    
 if __name__ == "__main__":
     main_solo()
