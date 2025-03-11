@@ -1,4 +1,3 @@
-
 import os
 from paths import PROJECT_ROOT,CONFIG_DIR
 import hydra
@@ -6,16 +5,17 @@ from omegaconf import DictConfig, OmegaConf
 
 import numpy as np
 import matplotlib.pyplot as plt
-import sim as sim
+import sim1p as sim
 import pandas as pd
 
 
-def TL_lum_iso(cfg: DictConfig, Lums, counts) -> None:
-    mc = cfg["mc"]
+def TL_lum_iso(cfg: DictConfig, x_ax, Lums) -> None:
+    mc = cfg["exp_type_fp"]
+
 
     #output dirs
-    output_dir_local = os.path.join(os.getcwd(), "results/figs/isoTL")
-    output_dir_hydra = os.path.join(PROJECT_ROOT, "results/figs/isoTL")
+    output_dir_local = os.path.join(os.getcwd(), f"results/figs1p/isoTL_C_{mc.T_start}")
+    output_dir_hydra = os.path.join(PROJECT_ROOT, f"results/figs1p/isoTL_C_{mc.T_start}")
     os.makedirs(output_dir_local, exist_ok=True)
     os.makedirs(output_dir_hydra, exist_ok=True)
 
@@ -24,10 +24,7 @@ def TL_lum_iso(cfg: DictConfig, Lums, counts) -> None:
     # Create two-subplot figure: 1 row, 2 columns
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
     for i in range(len(Lums)):
-        n_steps = Lums[i].shape[0]
-        x_ax = np.linspace(0, mc.dt * n_steps, n_steps)
-
-        lum_across_sims = np.mean(Lums[i], axis=1)
+        lum_across_sims = np.mean(Lums[:,i], axis=1)
         lum_across_sims_normalized = lum_across_sims / np.max(lum_across_sims)
 
         # Plot unnormalized on the first subplot
@@ -65,69 +62,6 @@ def TL_lum_iso(cfg: DictConfig, Lums, counts) -> None:
     plt.savefig(os.path.join(output_dir_hydra, "Time_Lum.svg"))
     plt.close(fig)
 
-   
-def TL_lum_noniso(cfg: DictConfig, Lums,counts) -> None:
-    mc = cfg["mc"]
-
-    #output dirs
-    output_dir_local = os.path.join(os.getcwd(), "results/figs/TL")
-    output_dir_hydra = os.path.join(PROJECT_ROOT, "results/figs/TL")
-    os.makedirs(output_dir_local, exist_ok=True)
-    os.makedirs(output_dir_hydra, exist_ok=True)
-
-
-    n_colors = len(Lums)
-    colors = plt.cm.rainbow(np.linspace(0, 1, n_colors))
-    plt.clf()
-    for i in range(len(Lums)):
-        lum_across_sims = np.mean(Lums[i], axis=1)
-        n_steps = Lums[i].shape[0]  
-        x_ax = np.linspace(mc.T_start[i], mc.T_end[i], n_steps)
-
-        #` Generate an array of colors using the "rainbow" colormap
-        plt.plot(x_ax, lum_across_sims,color=colors[i], linewidth=0.5, label=f'{mc.T_rate[i]}', linestyle='--')
-    plt.text(0.6,0.9,"Heating Rate ($^{\circ}C.s^{-1}$)",
-    transform=plt.gca().transAxes,   # interpret x,y as axes coords
-    fontsize=12,)
-    
-    plt.xlabel("Temperature ($^{\circ}C$)")
-    plt.ylabel("Intensity ($^{\circ}C^{-1}$)")
-    plt.legend(bbox_to_anchor=(0.7, 0.9), loc='upper left')
-    # Save your plot in the new directory
-    plt.savefig(os.path.join(output_dir_local, f"Temp_LumdT{mc.T_rate}.svg"))
-    plt.savefig(os.path.join(output_dir_hydra, f"Temp_LumdT{mc.T_rate}.svg"))
-
-
-def TL_lum_rhoEs(cfg:DictConfig,Lums:list,counts:list) -> None:
-    mc = cfg["mc"]
-    phys = cfg["phys"]
-    #output dirs
-    output_dir_local = os.path.join(os.getcwd(), "results/figs/TL_rhoEs")
-    output_dir_hydra = os.path.join(PROJECT_ROOT, "results/figs/TL_rhoEs")
-    
-    os.makedirs(output_dir_local, exist_ok=True)
-    os.makedirs(output_dir_hydra, exist_ok=True)
-
-
-    runs = len(Lums)
-    colors = plt.cm.rainbow(np.linspace(0, 1, runs))
-    plt.clf()
-    for i in range(len(Lums)):
-        lum_across_sims = np.mean(Lums[i], axis=1)
-        n_steps = Lums[i].shape[0]  
-        x_ax = np.linspace(mc.T_start[i], mc.T_end[i], n_steps)
-
-        #` Generate an array of colors using the "rainbow" colormap
-        plt.plot(x_ax, lum_across_sims,
-                 color=colors[i], linewidth=0.5, 
-                 label=f"$\\rho'$: {phys.rho_prime[i]:.0e}, E={phys.E[i]:.0e}eV, s_tun={phys.s_tun[i]:.0e}$s^-1$", 
-                 linestyle='--')
-    plt.xlabel("Temperature ($^{\circ}C$)")
-    plt.ylabel("Intensity ($^{\circ}C^{-1}$)")
-    plt.legend(bbox_to_anchor=(0.5, 0.9), loc='upper left')
-    # Save your plot in the new directory
-    plt.savefig(os.path.join(output_dir_local, f"rhoEs{runs}.svg"))
-    plt.savefig(os.path.join(output_dir_hydra, f"rhoEs{runs}.svg"))
 
 def OSL_A(cfg:DictConfig,Lums:list,counts:list) -> None:
     mc = cfg["mc"]
@@ -197,21 +131,36 @@ def CW_IRSL(cfg:DictConfig,Lums:list,counts:list) -> None:
     plt.savefig(os.path.join(output_dir_hydra, f"CW-IRSL_A_{phys.A}.svg"))
     plt.show()
 
-@hydra.main(version_base=None, config_path=CONFIG_DIR, config_name="config")
-def main(cfg: DictConfig) -> None:
-    lums, counts,configs = sim.general_run(cfg)
-    if cfg.exp_type.loop_type == "temp":
+def main(cfg: DictConfig,x_ax,lum_sec) -> None:
+    mc = cfg["exp_type_fp"]
+    if mc.exp_type == "temp":
         print("Plotting for temperature loop")
-        TL_lum_noniso(configs,lums,counts)
-        TL_lum_rhoEs(configs,lums,counts)
-        TL_lum_iso(configs,lums,counts)
-        OSL_A(configs,lums,counts)
-    elif cfg.exp_type.loop_type == "iso":
-        TL_lum_iso(configs,lums,counts)
-    elif cfg.exp_type.loop_type == "optic":
+        #TL_lum_noniso(configs,lums,counts)
+        #TL_lum_rhoEs(configs,lums,counts)
+        #TL_lum_iso(configs,lums,counts)
+        #OSL_A(configs,lums,counts)
+    elif mc.exp_type == "iso":
+        TL_lum_iso(cfg,x_ax,lum_sec)
+    elif mc.exp_type == "optic":
+        OSL_A(cfg,lums,counts)
+        CW_IRSL(cfg,lums,counts)
+    print("Done!")
+
+@hydra.main(version_base=None, config_path=CONFIG_DIR, config_name="config_fp")
+def main_solo(cfg: DictConfig,x_ax,lum_sec) -> None:
+    mc = cfg["exp_type_fp"]
+    lums, counts,configs = sim.general_run(cfg)
+    if mc == cfg["exp_type_fp"] == "temp":
+        print("Plotting for temperature loop")
+        #TL_lum_noniso(configs,lums,counts)
+        #TL_lum_rhoEs(configs,lums,counts)
+        #TL_lum_iso(configs,lums,counts)
+        #OSL_A(configs,lums,counts)
+    elif mc == cfg["exp_type_fp"] == "iso":
+        TL_lum_iso(configs,x_ax,lum_sec)
+    elif mc == cfg["exp_type_fp"] == "optic":
         OSL_A(configs,lums,counts)
         CW_IRSL(configs,lums,counts)
     print("Done!")
-
 if __name__ == "__main__":
-    main()
+    main_solo()

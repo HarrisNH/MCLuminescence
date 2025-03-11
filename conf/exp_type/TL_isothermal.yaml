@@ -1,5 +1,5 @@
 name: isothermal #name of experiment type
-loop_type: time
+loop_type: iso
 #temp
 T_start: [220] #Celsius
 #sims

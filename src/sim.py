@@ -38,7 +38,7 @@ def experiment_setup(i,configs):
     print(mc.loop_type)
     if mc.loop_type == "temp" and (mc.T_rate[i]) != 0:
         duration = (mc.T_end[i]-mc.T_start[i])/(mc.T_rate[i])
-    elif mc.loop_type in ["time","optic"]:
+    elif mc.loop_type in ["iso","optic"]:
         duration = mc.duration
 
     timesteps = int(duration/mc.dt)
@@ -51,9 +51,8 @@ def experiment_setup(i,configs):
     count_start_nsims = np.tile(count_start.reshape(-1, 1), (1, n_sims))
     count[0] = np.round(count_start_nsims).astype(int) 
     Lum = np.zeros((timesteps,n_sims))
-
-    if mc.loop_type == "temp":
-        kel = 273.15 #celsius to kelvin
+    kel = 273.15 #celsius to kelvin
+    if mc.loop_type == "temp":  
             #Precalculate rate of tunneling
         temps = np.linspace(mc.T_start[i]+kel,mc.T_end[i]+kel,int(duration/mc.dt))
         A = phys.s_tun[i]*np.exp(-phys.E[i]/(phys.k_b[i]*temps))
@@ -62,7 +61,7 @@ def experiment_setup(i,configs):
         P_rate_nsim = np.tile(P_rate.reshape(-1, len(rs),1), (1, 1,mc.sims)) #make it compatible with number of sims
         #rate times time delta 
         P = P_rate_nsim*mc.dt
-    elif mc.loop_type == "time":
+    elif mc.loop_type == "iso":
         if phys.A_self_calc[i] == 1: #calculate A0 from the given values or overwrite with the given value
             A0 = phys.s_tun[i]*np.exp(-phys.E[i]/(phys.k_b[i]*(mc.T_start[i]+kel)))
         else: A0 = phys.A[i]
@@ -94,7 +93,7 @@ def general_run(cfg):
     Lums = []
     counts = []
 
-    for i in range(len(mc["T_end"])):
+    for i in range(len(mc["T_start"])):
         count, Lum,P = experiment_setup(i,configs)
         if mc.loop_type == "temp":
             kel = 273.15 #celsius to kelvin
@@ -112,7 +111,7 @@ def general_run(cfg):
                         print("Loop: ",j, "of total steps: ",P.shape[0], f"\n with total lum in last {updater} steps: ",sum(Lum[j-updater:j])) #fix this
             Lums.append(Lum)
             counts.append(count)
-        elif mc.loop_type == "time":
+        elif mc.loop_type == "iso":
             for j in range(len(count)-1):
                 P[j][count[j]==0] = 0
                 delta_n = -np.random.binomial(n=count[j].astype(int), p=P[j])
