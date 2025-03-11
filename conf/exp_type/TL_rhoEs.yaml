@@ -1,7 +1,9 @@
 name: TL_rhoEs #name of experiment type
+loop_type: temp
 #temperature
-T_start: 0 #Celsius
-T_end: 1000
+runs: 1
+T_start: [0] #Celsius
+T_end: [1000] #Celsiou
 T_rate: [5] #kelvin/second
 #sims
 sims: 2

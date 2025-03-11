@@ -1,9 +1,9 @@
-name: non_isothermal #name of experiment type
-loop_type: temp
+name: OSL_A #optically stimulated luminescence curves 
+loop_type: optic
 #temperature
 T_start: [0] #Celsius
 T_end: [800]
-T_rate: [0.1,1,5,10,20] #kelvin/second
+T_rate: [0] #kelvin/second
 #sims
 sims: 2
 N0: 1e9 #number of electrons
@@ -11,5 +11,6 @@ N0: 1e9 #number of electrons
 distance: 2
 dr_prime: 0.02 #distance change
 #time
-dt: 0.1 #s
+dt: 0.001 #s low to avoid high P's
+duration: 60 #s
 

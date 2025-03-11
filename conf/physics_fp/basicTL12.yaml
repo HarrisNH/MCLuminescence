@@ -1,0 +1,6 @@
+name: basic
+alpha: 1e11 # [m^-1] tunelling rate constant #just a guess
+b: 1e12 #[s^-1] attempt to tunnel frequency
+k_b: 8.617343e-5 #Boltzmann constant
+E: 1.2 # [eV]
+s: 1e12 #[s^-1] attempt to escape frequncey or lattice vibration frequency (what is difference with b)
