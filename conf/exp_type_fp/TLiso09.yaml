@@ -10,13 +10,13 @@ duration: 10 #[s]
 #sims
 sims: 2
 electrons: [100] #number of electrons
-holes: [500] #number of holes inside box (remeber adds someone just outside boundary)
+holes: [100] #number of holes inside box (remeber adds someone just outside boundary)
 
 #box
 box_l: [1e-9] 
 box_w: [1e-9] 
 box_h: [1e-9] 
-boundary_fatcor: [1.2]
+boundary_factor: [1.2]
 
 #steps
 steps: 50000
@@ -24,5 +24,5 @@ steps: 50000
 #plots
 distance_plot: False
 x_lim: 10
-bin_size: 1 #This is the size for our bins in histogram plot
+bin_size: 0.1 #This is the size for our bins in histogram plot
 # (Basically just how we aggreagate on the x-axis)
