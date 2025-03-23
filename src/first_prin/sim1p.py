@@ -166,7 +166,7 @@ def main(cfg: DictConfig) -> None:
                     holes = np.delete(holes, hole_index[recombination], 0)
                     distances, hole_index = calc_distances(electrons, holes)
                     rate = probability_thermal(run_cfg, distances)
-                    Lum[i, j,key] = np.sum(recombination)
+                    Lum[i, j,key] = np.sum(recombination)/mc.dt #not sure about denominatior
                     if len(rate) / mc.electrons < 0.10:
                         break
                     if i % 1000 == 0:
@@ -203,7 +203,7 @@ def main(cfg: DictConfig) -> None:
                     holes = np.delete(holes, hole_index[recombination], 0)
                     distances, hole_index = calc_distances(electrons, holes)
                     rate = probability_thermal(run_cfg, distances)
-                    Lum[i, j,key] = np.sum(recombination)/(mc.T_rate[i]*mc.dt)
+                    Lum[i, j,key] = np.sum(recombination)/(mc.T_rate*mc.dt)
                     if len(rate) / mc.electrons < 0.10:
                         break
                     if i % 1000 == 0:
