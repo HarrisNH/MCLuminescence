@@ -1,9 +1,10 @@
 defaults:
   - _self_
+  - exp_type_fp: TLiso09 #experiment_type
   - physics_fp: basic #phys_old_noniso #physical constants
-  - exp_type_fp: TL12 #experiment_type
-# TLiso09 TL12
-# phys_old_noniso phys_optic12 phys_optic19 phys_static
+
+# TLiso09 TL12 IsoBG 
+# phys_old_noniso phys_optic12 phys_optic19 phys_static BG_basic
   - setup: setup #manual setup such as use A_isoth or self calculate based on other parameters
 
 hydra:

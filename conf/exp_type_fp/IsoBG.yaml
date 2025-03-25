@@ -1,0 +1,32 @@
+#Inspired by Pagonis 2017
+name: TL
+exp_type: background
+T_start: [400] #[C] celsius
+T_rate: 0
+
+#time
+dt: 0.01 #[s]
+duration: 1e13 #[s] 1000000 years
+
+#sims
+sims: 1
+electrons: [0] #number of electrons
+holes: [3000] #number of traps inside box
+N_e: [587] #max number of electron traps #not sure about this value
+
+#box # 
+rho_prime: 1e-6 #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
+d: 150e-9
+box_l: [4e-7] 
+box_w: [4e-7] 
+box_h: [4e-7] 
+boundary_factor: [1.2]
+
+#steps
+steps: 50000
+
+#plots
+distance_plot: False
+x_lim: 10
+bin_size: 0.1 #This is the size for our bins in histogram plot
+# (Basically just how we aggreagate on the x-axis)

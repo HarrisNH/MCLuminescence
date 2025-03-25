@@ -1,6 +1,6 @@
 name: TL
 exp_type: iso
-T_start: [400,600,800] #[C] celsius
+T_start: [400,400,400] #[C] celsius
 T_rate: 0
 
 #time
@@ -10,16 +10,18 @@ duration: 10 #[s]
 #sims
 sims: 2
 electrons: [100] #number of electrons
-holes: [100] #number of holes inside box (remeber adds someone just outside boundary)
+holes: [1222] #number of holes inside box (remeber adds someone just outside boundary)
 
-#box
-box_l: [1e-9] 
-box_w: [1e-9] 
-box_h: [1e-9] 
+#box # 
+rho_prime: [1e-5, 1.3e-4,2.3e-3] #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
+#recreate Pagonis 2017 fig 3 [1e-5, 1.3e-4,2.3e-3]
+box_l: [4e-7] 
+box_w: [4e-7] 
+box_h: [4e-7] 
 boundary_factor: [1.2]
 
 #steps
-steps: 50000
+steps: 20000
 
 #plots
 distance_plot: False

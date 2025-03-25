@@ -1,0 +1,9 @@
+name: basic
+alpha: 9e9 # [m^-1] tunelling rate constant #Huntley 2006
+b: 1e12 #[s^-1] attempt to tunnel frequency
+k_b: 8.617343e-5 #Boltzmann constant
+E: 1.2 # [eV]
+s: 3e15 #[s^-1] attempt to escape frequncey or lattice vibration frequency (what is difference with b) Pagonis17 uses 3e15
+D: 3e-11 #Gy/s approxsame as 1Gy/ka
+D0: 300
+rho_trap: 1e22 #m^-3 Density of traps
