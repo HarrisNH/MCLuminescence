@@ -4,6 +4,6 @@ b: 1e12 #[s^-1] attempt to tunnel frequency
 k_b: 8.617343e-5 #Boltzmann constant
 E: 1.2 # [eV]
 s: 3e15 #[s^-1] attempt to escape frequncey or lattice vibration frequency (what is difference with b) Pagonis17 uses 3e15
-D: 3e-11 #Gy/s approxsame as 1Gy/ka
+D: [3.17e-11,6.34e-11,9.51e-11] #Gy/s approxsame as 1,2,3Gy/ka
 D0: 300
 rho_trap: 1e22 #m^-3 Density of traps

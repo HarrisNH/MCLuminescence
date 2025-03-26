@@ -120,12 +120,12 @@ def TL_donors_iso(cfg: DictConfig, x_ax, e_ratio) -> None:
     colors = plt.cm.rainbow(np.linspace(0, 1, e_ratio.shape[-1]))
     plt.clf()
     # Create two-subplot figure: 1 row, 2 columns
-    fig, (ax1) = plt.subplots(1, 1, figsize=(10, 5), sharey=False)
+    fig, (ax1,ax2) = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
     for j in range(e_ratio.shape[-2]):
         for i in range(e_ratio.shape[-1]):
             idx = np.argmin(x_ax[:,j,i]!=0)
             ns = sim.analy_TL_iso(cfg,x_ax[:idx,j,i],i)
-
+            ns_normalized = ns / np.max(ns)
             # Plot unnormalized on the first subplot
             ax1.plot(
                 x_ax[:idx,j,i], e_ratio[:idx,j,i],
@@ -133,15 +133,28 @@ def TL_donors_iso(cfg: DictConfig, x_ax, e_ratio) -> None:
                 label=f"rho'={mc.rho_prime[i]}",
                 linestyle="--"
             )
-            ax1.plot(x_ax[:idx,j,i],ns, color='black', linewidth=0.5, label=f"Analytical with rho_prime={mc.rho_prime[i]}", linestyle='--')
+
+            ax2.plot(
+                x_ax[:idx,j,i], e_ratio[:idx,j,i]/np.max(e_ratio[:idx,j,i]),
+                color=colors[i], linewidth=0.5,
+                label=f"rho'={mc.rho_prime[i]}",
+                linestyle="--"
+            )
+            ax1.plot(x_ax[:idx,j,i],ns, color='black', linewidth=0.5, label=f"Analytical with rho_prime={mc.rho_prime[i]}, electrons = {mc.electrons}", linestyle='--')
+            ax2.plot(x_ax[:idx,j,i],ns_normalized, color='black', linewidth=0.5, label=f"Analytical with rho_prime={mc.rho_prime[i]}, electrons = {mc.electrons}", linestyle='--')
     # Unnormalized plot
     ax1.set_xscale('log')
     ax1.set_xlabel("Time (s)")
     ax1.set_ylabel("Signal")
     ax1.set_title("Unnormalized")
-
     ax1.legend()
 
+    # Normalized plot
+    ax2.set_xscale('log')
+    ax2.set_xlabel("Time (s)")
+    ax2.set_ylabel("Signal")
+    ax2.set_title("Normalized")
+    ax2.legend()
     plt.tight_layout()
 
     # Save figure
@@ -217,6 +230,64 @@ def CW_IRSL(cfg:DictConfig,Lums:list,counts:list) -> None:
     plt.savefig(os.path.join(output_dir_hydra, f"CW-IRSL_A_{phys.A}.svg"))
     plt.show()
 
+def TL_iso_bg_gray(cfg:DictConfig,x_ax,lum,e_ratio) -> None:
+    mc = cfg.exp_type_fp
+    phys = cfg.physics_fp
+    #output dirs
+    output_dir_hydra = os.path.join(os.getcwd(), "results/figs/BG")
+    output_dir_local = os.path.join(PROJECT_ROOT, "results/figs/BG")
+    os.makedirs(output_dir_local, exist_ok=True)
+    os.makedirs(output_dir_hydra, exist_ok=True)
+
+    runs = e_ratio.shape[-1]
+    colors = plt.cm.rainbow(np.linspace(0, 1, runs))
+    plt.clf()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    x_common = np.linspace(0, 400, 2000)
+    window_size = 2  
+    for j in range(e_ratio.shape[-1]):
+        all_y_interp = []
+        
+        for i in range(e_ratio.shape[-2]):
+            #e_ratio_sims = np.mean(e_ratio[:,:,i], axis=1) #mean across nsims for each temperature
+            #e_ratio_sims_normalized = e_ratio_sims / np.max(e_ratio_sims)
+            # Suppose lum_across_sims is your raw signal array
+            
+            idx = np.argmin(x_ax[:,i,j]!=0)
+            smoothed_e = running_mean(e_ratio[:idx,i,j], window_size=window_size)
+            x_smoothed = x_ax[:idx,i,j][(window_size - 1) // 2 : -(window_size // 2)]
+            x_gray = x_smoothed*phys.D[j]
+            
+            y_interp = np.interp(x_common, x_gray, smoothed_e)
+            # 3) Accumulate
+            all_y_interp.append(y_interp)
+            #plt.plot(x_gray[:idx], smoothed_e[:idx],color=colors[j], linewidth=0.5, linestyle='--')
+    
+        # Convert to array for easy averaging
+        all_y_interp = np.array(all_y_interp)  # shape (n_sims, len(x_common))
+        # 4) Compute average across all simulations
+        mean_curve = np.mean(all_y_interp, axis=0)
+        # 5) Plot the average curve on x_common
+        s_to_kA = 3.170979198376e-11
+        plt.plot(x_common, mean_curve, color=colors[j], lw=2, label=f"Mean: N_e = {mc.N_e}, {phys.D[j]/s_to_kA:.0f} kA", linestyle = '--')
+    ax.set_xscale('linear')
+    ax.set_xlim(0, 400)
+    ticks = [100,200,300,400]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(["100","200","300","400"])
+    ax.set_ylim(0, 0.7)
+    # Supply your own tick labels as strings:
+
+    
+    plt.xlabel("Irradiation time (s) ")
+    plt.ylabel("Percent of filled traps")
+    plt.grid()
+    plt.legend(bbox_to_anchor=(0.7, 0.9), loc='upper left')
+    # Save your plot in the new directory
+    plt.savefig(os.path.join(output_dir_local, f"Gy_scale_D{phys.D}N{mc.N_e}.svg"))
+    plt.savefig(os.path.join(output_dir_hydra, f"Gy_scale_D{phys.D}N{mc.N_e}.svg"))
+
 def TL_iso_bg(cfg:DictConfig,x_ax,lum,e_ratio) -> None:
     mc = cfg.exp_type_fp
     phys = cfg.physics_fp
@@ -232,8 +303,11 @@ def TL_iso_bg(cfg:DictConfig,x_ax,lum,e_ratio) -> None:
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
 
-    window_size = 50
+    window_size = 3
+    x_common = np.logspace(11, 13, 2000)
+    
     for j in range(e_ratio.shape[-1]):
+        all_y_interp = []
         for i in range(e_ratio.shape[-2]):
             #e_ratio_sims = np.mean(e_ratio[:,:,i], axis=1) #mean across nsims for each temperature
             #e_ratio_sims_normalized = e_ratio_sims / np.max(e_ratio_sims)
@@ -242,16 +316,30 @@ def TL_iso_bg(cfg:DictConfig,x_ax,lum,e_ratio) -> None:
             idx = np.argmin(x_ax[:,i,j]!=0)
             smoothed_e = running_mean(e_ratio[:idx,i,j], window_size=window_size)
             x_smoothed = x_ax[:idx,i,j][(window_size - 1) // 2 : -(window_size // 2)]
-            plt.plot(x_smoothed[:idx], smoothed_e[:idx],color=colors[j], linewidth=0.5, label=f'Total number of electron traps{mc.N_e[j]}', linestyle='--')
-    ax.set_xscale('log')
-    ax.set_ylim(0,1)
-    ax.set_xlim(0,1e13)
-    #plt.text(0.6,0.9,"Heating Rate ($^{\circ}C.s^{-1}$)",
-    #transform=plt.gca().transAxes,   # interpret x,y as axes coords
-    #fontsize=12,)
+            
+            
+            y_interp = np.interp(x_common, x_smoothed, smoothed_e)
+            # 3) Accumulate
+            all_y_interp.append(y_interp)
+            plt.plot(x_smoothed[:idx], smoothed_e[:idx],color=colors[j], linewidth=0.5, linestyle='--')
     
-    plt.xlabel("Log time ")
+        # Convert to array for easy averaging
+        all_y_interp = np.array(all_y_interp)  # shape (n_sims, len(x_common))
+        # 4) Compute average across all simulations
+        mean_curve = np.mean(all_y_interp, axis=0)
+        # 5) Plot the average curve on x_common
+        s_to_kA = 3.170979198376e-11
+        plt.plot(x_common, mean_curve, color=colors[j], lw=2, label=f"Mean: N_e = {mc.N_e}, {phys.D[j]/s_to_kA:.3f} kA", linestyle = '--')
+    ax.set_xscale('linear')
+    ax.set_xlim(0, 1e13)
+    ticks = [2e12, 4e12, 6e12, 8e12, 1e13]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(["2e12","4e12","6e12","8e12","1e13"])
+    ax.set_ylim(0, 0.75)
+    
+    plt.xlabel("Irradiation time (s)")
     plt.ylabel("Percent of filled traps")
+    plt.grid()
     plt.legend(bbox_to_anchor=(0.7, 0.9), loc='upper left')
     # Save your plot in the new directory
     plt.savefig(os.path.join(output_dir_local, f"D{phys.D}N{mc.N_e}.svg"))
@@ -292,6 +380,7 @@ def main_solo(cfg: DictConfig) -> None:
     elif mc.exp_type == "background":
         print("Plotting for background radiation")
         TL_iso_bg(cfg,x_ax, lum,e_ratio)
+        TL_iso_bg_gray(cfg,x_ax, lum,e_ratio)
     print("Done!")
     
 if __name__ == "__main__":

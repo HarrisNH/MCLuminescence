@@ -1,7 +1,7 @@
 defaults:
   - _self_
-  - exp_type_fp: TLiso09 #experiment_type
-  - physics_fp: basic #phys_old_noniso #physical constants
+  - exp_type_fp: IsoBG #experiment_type
+  - physics_fp: BG_basic #phys_old_noniso #physical constants
 
 # TLiso09 TL12 IsoBG 
 # phys_old_noniso phys_optic12 phys_optic19 phys_static BG_basic

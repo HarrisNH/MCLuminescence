@@ -6,13 +6,13 @@ T_rate: 0
 
 #time
 dt: 0.01 #[s]
-duration: 1e13 #[s] 1000000 years
+duration: 1e14 #[s] 1000000 years
 
 #sims
-sims: 1
+sims: 50
 electrons: [0] #number of electrons
 holes: [3000] #number of traps inside box
-N_e: [587] #max number of electron traps #not sure about this value
+N_e: [200] #max number of electron traps #not sure about this value
 
 #box # 
 rho_prime: 1e-6 #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
