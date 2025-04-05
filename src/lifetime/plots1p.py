@@ -344,39 +344,112 @@ def TL_iso_bg(cfg:DictConfig,x_ax,lum,e_ratio) -> None:
     # Save your plot in the new directory
     plt.savefig(os.path.join(output_dir_local, f"D{phys.D}N{mc.N_e}.svg"))
     plt.savefig(os.path.join(output_dir_hydra, f"D{phys.D}N{mc.N_e}.svg"))
+
+def TL_lab(cfg:DictConfig,x_ax,lum,e_ratio, configs) -> None:
+    mc = cfg.exp_type_fp
+    phys = cfg.physics_fp
+    #output dirs
+    output_dir_hydra = os.path.join(os.getcwd(), "results/figs/lab")
+    output_dir_local = os.path.join(PROJECT_ROOT, "results/figs/lab")
+    os.makedirs(output_dir_local, exist_ok=True)
+    os.makedirs(output_dir_hydra, exist_ok=True)
+    runs = e_ratio.shape[-1]
+    colors = plt.cm.rainbow(np.linspace(0, 1, runs))
+    plt.clf()
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 7))
+    window_size = 3
+
+    x_gray_common = np.linspace(0, phys.D[0]*mc.duration, 2000)
+    x_temp_common = np.linspace(mc.T_start[0],mc.T_end[0], 2000)
+    x_time_common = np.linspace(0, mc.duration, 2000)
+    for j in range(e_ratio.shape[-1]):
+        mc = configs[j].exp_type_fp
+        phys = configs[j].physics_fp
+        x_time = np.linspace(0, mc.duration, 2000)
+        x_temp = np.linspace(mc.T_start,mc.T_end, 2000)
+        all_y_interp_gray,all_y_interp_temp,all_y_interp_time = [],[],[]
+        for i in range(e_ratio.shape[-2]):
+            #e_ratio_sims = np.mean(e_ratio[:,:,i], axis=1) #mean across nsims for each temperature
+            #e_ratio_sims_normalized = e_ratio_sims / np.max(e_ratio_sims)
+            # Suppose lum_across_sims is your raw signal array
+            
+            idx = np.argmin(x_ax[:,i,j]!=0)
+            smoothed_e = running_mean(e_ratio[:idx,i,j], window_size=window_size)
+            x_smoothed = x_ax[:idx,i,j][(window_size - 1) // 2 : -(window_size // 2)]
+            x_gray = x_smoothed*phys.D
+            x_time = x_smoothed
+            x_temp = mc.T_start+x_smoothed*mc.T_rate
+
+            # 2) Interpolate to common x-axis
+            y_interp_gray = np.interp(x_gray_common, x_gray, smoothed_e)
+            y_interp_temp = np.interp(-x_temp_common, -x_temp, smoothed_e)
+            y_interp_time = np.interp(x_time_common, x_time, smoothed_e)
+            # 3) Accumulate
+            all_y_interp_gray.append(y_interp_gray)
+            all_y_interp_temp.append(y_interp_temp)
+            all_y_interp_time.append(y_interp_time)
+    
+        # Convert to array for easy averaging
+        all_y_interp_gray = np.array(all_y_interp_gray)  # shape (n_sims, len(x_gray_common))
+        all_y_interp_temp = np.array(all_y_interp_temp)  # shape (n_sims, len(x_temp_common))
+        all_y_interp_time = np.array(all_y_interp_time)  # shape (n_sims, len(x_time_ common))
+        # 4) Compute average across all simulations
+        mean_curve_gray = np.mean(all_y_interp_gray, axis=0)
+        mean_curve_temp = np.mean(all_y_interp_temp, axis=0)
+        mean_curve_time = np.mean(all_y_interp_time, axis=0)
+
+        # 5) Plot the average curve on x_commons
+        ax1.plot(x_gray_common, mean_curve_gray, color=colors[j], lw=2, 
+                 label=f"{phys.D:.3f} Gy/s", linestyle='--')
+        ax2.plot(x_temp_common, mean_curve_temp, color=colors[j], lw=2, 
+                 label=f"{mc.T_rate} K/s", linestyle='--')
+        ax3.plot(x_time_common, mean_curve_time, color=colors[j], lw=2, 
+                 label=f"Time: s", linestyle='--')
+        ax2.text(0.45,0.9,f"{mc.T_rate/phys.D} K/Gy",transform=fig.transFigure, fontsize=12)
+
+
+    ax1.set_xlabel("Irradiation  (Gray) "), ax2.set_xlabel("Temperature ($^{\circ}C$)"), ax3.set_xlabel("Time (s)")
+    ax1.set_ylabel("Percent of filled traps"), ax2.set_ylabel("Percent of filled traps"), ax3.set_ylabel("Percent of filled traps")
+
+    ax2.set_xlim(mc.T_start,mc.T_end)
+    ax1.set_ylim(0, 1), ax2.set_ylim(0, 1), ax3.set_ylim(0, 1)
+    ax1.legend(bbox_to_anchor=(0.16, 0.9), loc='upper left'), ax2.legend(bbox_to_anchor=(0.1, 0.9), loc='upper left'), ax3.legend(bbox_to_anchor=(0.1, 0.9), loc='upper left')
+    
+    # Save your plot in the new directory
+    plt.savefig(os.path.join(output_dir_local, f"Time_Temp_Gray.svg"))
+    plt.savefig(os.path.join(output_dir_hydra, f"Time_Temp_Gray.svg"))
+
+
     
 def main(cfg: DictConfig,x_ax,lum_sec) -> None:
-    mc = cfg["exp_type_fp"]
+    print("Starting simulation")
+    x_ax, lum, e_ratio,configs = sim.main(cfg)
+    mc = cfg.exp_type_fp
     if mc.exp_type == "TL":
         print("Plotting for temperature loop")
-        TL_temp(cfg,x_ax,lum_sec)
-        #TL_lum_rhoEs(configs,lums,counts)
-        #TL_lum_iso(configs,lums,counts)
-        #OSL_A(configs,lums,counts)
+        TL_temp(cfg,x_ax,lum)
     elif mc.exp_type == "iso":
-        TL_lum_iso(cfg,x_ax,lum_sec)
-    elif mc.exp_type == "optic":
-        OSL_A(cfg,lums,counts)
-        CW_IRSL(cfg,lums,counts)
+        TL_donors_iso(cfg,x_ax,e_ratio)
+    elif mc.exp_type == "lab_TL":
+        TL_lab(cfg,x_ax, lum,e_ratio,configs)
+    elif mc.exp_type == "background":
+        print("Plotting for background radiation")
+        TL_iso_bg(cfg,x_ax, lum,e_ratio)
+        TL_iso_bg_gray(cfg,x_ax, lum,e_ratio)
     print("Done!")
 
 @hydra.main(version_base=None, config_path=CONFIG_DIR, config_name="config_fp")
 def main_solo(cfg: DictConfig) -> None:
     print("Starting simulation")
-    x_ax, lum, e_ratio = sim.main(cfg)
+    x_ax, lum, e_ratio,configs = sim.main(cfg)
     mc = cfg.exp_type_fp
     if mc.exp_type == "TL":
         print("Plotting for temperature loop")
         TL_temp(cfg,x_ax,lum)
-        #TL_lum_rhoEs(configs,lums,counts)
-        #TL_lum_iso(configs,lums,counts)
-        #OSL_A(configs,lums,counts)
     elif mc.exp_type == "iso":
-        #TL_lum_iso(cfg,x_ax,lum)
         TL_donors_iso(cfg,x_ax,e_ratio)
-    elif mc.exp_type == "optic":
-        OSL_A(configs,lums,counts)
-        CW_IRSL(configs,lums,counts)
+    elif mc.exp_type == "lab_TL":
+        TL_lab(cfg,x_ax, lum,e_ratio,configs)
     elif mc.exp_type == "background":
         print("Plotting for background radiation")
         TL_iso_bg(cfg,x_ax, lum,e_ratio)

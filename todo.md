@@ -17,3 +17,6 @@ Is it conceptually wrong to subtract total time passed instead of time since ele
 
 
 it seems like when he talks about rho prime he is talking about the density of holes in the box - make sure you fix this for the BG experiment
+
+
+Remember to scale parameters to be adjusted

@@ -4,7 +4,6 @@ T_start: [0] #[C] celsius
 T_end: [800]
 T_rate: [0.1,1,5,20]
 #time
-dt: 0.01 #[s]
 duration: 10 #[s]
 
 #sims
