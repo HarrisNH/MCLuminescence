@@ -54,15 +54,13 @@ def rho_func(cfg):
     rho = mc.rho_prime*(3/(4*np.pi)*phys.alpha**3)
     return rho
 
-def initialize_box_bg(cfg,e_ratio_start=False):
+def initialize_box_bg(cfg,e_ratio_start=0):
     """
     Initialize the electrons and holes in the box centered at the origin.
     """
     phys = cfg.physics_fp
     mc = cfg.exp_type_fp
-    if not e_ratio_start:
-        e = mc.electrons
-    else: e = int(mc.N_e*e_ratio_start)
+    e = int(mc.N_e*e_ratio_start)
 
     rho = rho_func(cfg)
     h = int(mc.holes)
@@ -524,17 +522,19 @@ def sim_lab_TL(run_cfg, Lum, x_ax, electron_ratio,key,exp_list):
             return x_ax, Lum, electron_ratio
 
 
-def sim_lab_TL_residuals(run_cfg,params):
-            rho_prime, E, s, N_e = params
+def sim_lab_TL_residuals(run_cfg):
             mc = run_cfg.exp_type_fp
+            phys = run_cfg.physics_fp
             lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IRSL50_0.25KperGy.csv")
             SE = []
+            ER = []
             print(f"rho': {mc.rho_prime}")
             for k in range(len(lab_cfg)):
                 for j in range(mc.sims):
-                    electrons, holes,box_dim,e_max = initialize_box_bg(run_cfg)
-                    e_timer = np.array([])
-                    dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
+                    electrons, holes,box_dim = initialize_box_bg(run_cfg)
+                    e_timer = np.zeros(electrons.shape[0])
+                    D = phys.D
+                    dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                     timebin = np.zeros(mc.steps)           
                     distances = calc_distances(electrons, holes)
                     if distances.size != 0:
@@ -552,7 +552,7 @@ def sim_lab_TL_residuals(run_cfg,params):
                     while timebin[i-1]<lab_cfg.Duration[k]:
                         #timenow = timebin[i-1]
                         #Time step is decided by time until next recombination or filling event
-                        dt_recomb = np.min(recombination - e_timer[:recombination.shape[0]]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
+                        dt_recomb = np.min((recombination + e_timer[:recombination.shape[0]])-timebin[i-1]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
                         dt = np.min((dt_recomb,dt_filling-t0))#2C max step
                         T = T + dt*T_rate
                         if dt == dt_filling-t0:
@@ -565,13 +565,14 @@ def sim_lab_TL_residuals(run_cfg,params):
                             min_distances, hole_index = min_distance(distances)
                             lifetime = lifetime_thermal(run_cfg, min_distances,T)
                             recombination = np.random.exponential(lifetime)
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                             #else:
                             #    pass
                         elif dt == dt_recomb:
                             dt = np.max((dt,0))
                             timebin[i] = timebin[i - 1] + dt
-
+                            if (np.where((timebin[i] >= recombination+e_timer))[0]).shape[0] > 1 and dt != 0:
+                                print("More than one recombination event at the same time")
 
                             #Handle recombination event
                             distances, electrons, holes,hole_index,min_distances,recombination,_,e_timer = recomber(run_cfg,
@@ -580,19 +581,20 @@ def sim_lab_TL_residuals(run_cfg,params):
                             ###UPDATE THE FILLING when electrons are removed 
                             #Update time since last filling as well as filling time
                             t0 += dt
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                             #Recalculate distances for electrons that shared the recombined hole
                             lifetime = lifetime_thermal(run_cfg, min_distances,T)
                             recombination = np.random.exponential(lifetime)
 
                         i+=1
                     #Calculate MSE
-                    e_ratio_end = electrons.shape[0]/e_max
+                    e_ratio_end = electrons.shape[0]/mc.N_e
                     print(e_ratio_end-lab_cfg.Fill[k])
-                    
+                    ER.append(abs(e_ratio_end-lab_cfg.Fill[k]))
                     SE.append((e_ratio_end-lab_cfg.Fill[k])**2)
             MSE = np.mean(SE)
-            print(f"Mean Squared Error: {MSE} with params {params}")
+            avgER = np.mean(ER)
+            print(f"absError: {avgER}, MSE: {MSE} with params: \n rho' = {run_cfg.exp_type_fp.rho_prime}, E = {run_cfg.physics_fp.E}, b = {run_cfg.physics_fp.b}, alpha = {phys.alpha},holes= {run_cfg.exp_type_fp.holes}")
             return MSE
 
 def sim_lab_TL_residuals_iso(run_cfg):
