@@ -12,7 +12,8 @@ def extract_data_TL():
     data["T_start"] = data["Temp_start"]
     data["T_end"] = data["Temp_end"]
     data["Fill"] = data["n/N_calc_from_DRCsatlevel"]
-    data[[ "Duration", "T_start", "T_end","Fill",]].to_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IRSL50_0.25KperGy.csv", index=False)
+    data["e_ratio"] = 0
+    data[["Duration", "T_start", "T_end", "Fill", "e_ratio"]].to_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IRSL50_0.25KperGy.csv", index=False)
 
 
 def extract_data_TL_iso(L0):
@@ -33,5 +34,5 @@ def extract_data_TL_iso(L0):
     df.to_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IR50_ISO.csv", index=False)
 
 
-extract_data_TL_iso(L0=1.52)
+#extract_data_TL_iso(L0=1.52)
 extract_data_TL()
