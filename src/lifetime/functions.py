@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from paths import PROJECT_ROOT
 import pandas as pd
 
+
 def initialize_runs(cfg):
     # Build the original dictionary of dictionaries
     configs = {
@@ -150,14 +151,46 @@ def lifetime_thermal(cfg, distances,temp=0):
     mc = cfg.exp_type_fp
     phys = cfg.physics_fp
     xi = phys.E / (phys.k_b * (temp))
-    rate = phys.b * np.exp(-(xi + phys.alpha * distances))
-    return 1/rate
+    lifetime = 1/phys.b * np.exp(xi + phys.alpha * distances)
+    return lifetime
 
 def lifetime_tunneling(cfg,distances):
     mc = cfg.exp_type_fp
     phys = cfg.physics_fp
-    lifetime = 1/phys.s*np.exp(phys.alpha*distances)
+    lifetime = 1/phys.b*np.exp(phys.alpha*distances)
     return lifetime
+
+def lifetime_thermal(cfg, distances,T=0):
+    """
+    Calculate the probability of tunneling for each electron-hole pair.
+    Formula: b * exp(-(etha + alpha * distances))
+    Temp input should be in kelvin
+    """
+    mc = cfg.exp_type_fp
+    phys = cfg.physics_fp
+    xi = phys.E / (phys.k_b * T)
+    lifetime = 1/phys.b * np.exp(xi + phys.alpha * distances)
+    return lifetime
+
+def lifetime_fading(cfg,distances, T=0):
+    """ Compute the combined thermal (conduction-band) and localized (tunnelling)
+    recombination lifetime for each electron-hole pair.
+    temp should be in kelvin."""
+    mc = cfg.exp_type_fp
+    phys = cfg.physics_fp
+    # Conduction-band release rate: s * exp(-E_cb / (phys.k_b * T))
+    k_cb = phys.s * np.exp(-phys.E_cb / (phys.k_b * T))
+
+    # Localized tunnelling rate: b * exp(-E_loc / (phys.k_b * T) - phys.alpha * distances)
+    k_tun = phys.b * np.exp(-phys.E_loc / (phys.k_b * T) - phys.alpha * distances)
+
+    # Total recombination rate is sum of the two channels
+    rate = k_cb + k_tun
+
+    # Lifetime is inverse of total rate
+    lifetime = 1.0 / rate
+
+
 
 
 def distance_plot(cfg, distances):
@@ -528,34 +561,46 @@ def sim_lab_TL_residuals(run_cfg):
             lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IRSL50_0.25KperGy.csv")
             SE = []
             ER = []
-            print(f"rho': {mc.rho_prime}")
+
+            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
+            plot_data = {}
+
             for k in range(len(lab_cfg)):
+                e_ratio_start = lab_cfg["e_ratio"].iloc[k]
+                # Create local lists to record time and electron ratio for this simulation run.
+                sim_times = []
+                sim_ratios = []
+                # Initialize dictionary entry for this outer loop
+                plot_data[k] = {"times": [], "ratios": []}
                 for j in range(mc.sims):
-                    electrons, holes,box_dim = initialize_box_bg(run_cfg)
+                    electrons, holes,box_dim = initialize_box_bg(run_cfg, e_ratio_start)
                     e_timer = np.zeros(electrons.shape[0])
                     D = phys.D
                     dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                    timebin = np.zeros(mc.steps)           
+                    timebin = np.zeros(mc.steps)       
+                    T = lab_cfg.T_start[k]+273.15    
                     distances = calc_distances(electrons, holes)
                     if distances.size != 0:
                         min_distances, hole_index = min_distance(distances)
                     
                         #find lifetime of all electrons
-                        lifetime = lifetime_tunneling(run_cfg, min_distances) #this needs to be updated for changing number of electrons 
+                        lifetime = lifetime_thermal(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
                         recombination = np.random.exponential(lifetime)
                     else:
                         recombination = np.array([])     
                     i=0
                     t0 = 0 #check whether t0 is correct (how it is reset)
-                    T = lab_cfg.T_start[k]+273.15
+                    
                     T_rate = (lab_cfg.T_end[k]-lab_cfg.T_start[k])/lab_cfg.Duration[k]
                     while timebin[i-1]<lab_cfg.Duration[k]:
+
                         #timenow = timebin[i-1]
                         #Time step is decided by time until next recombination or filling event
                         dt_recomb = np.min((recombination + e_timer[:recombination.shape[0]])-timebin[i-1]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
                         dt = np.min((dt_recomb,dt_filling-t0))#2C max step
-                        T = T + dt*T_rate
+
                         if dt == dt_filling-t0:
+                            T = T + dt*T_rate
                             t0 = 0
                             timebin[i] = timebin[i - 1] + dt
                             #if np.random.rand(1)+1 > ratio_traps:
@@ -569,6 +614,7 @@ def sim_lab_TL_residuals(run_cfg):
                             #else:
                             #    pass
                         elif dt == dt_recomb:
+                            T = T + dt*T_rate
                             dt = np.max((dt,0))
                             timebin[i] = timebin[i - 1] + dt
                             if (np.where((timebin[i] >= recombination+e_timer))[0]).shape[0] > 1 and dt != 0:
@@ -585,16 +631,25 @@ def sim_lab_TL_residuals(run_cfg):
                             #Recalculate distances for electrons that shared the recombined hole
                             lifetime = lifetime_thermal(run_cfg, min_distances,T)
                             recombination = np.random.exponential(lifetime)
-
+                                                # Record the current electron ratio and simulation time.
+                        e_ratio_current = electrons.shape[0] / mc.N_e
+                        sim_times.append(timebin[i])
+                        sim_ratios.append(e_ratio_current)
                         i+=1
+                    plot_data[k]["times"] = sim_times
+                    plot_data[k]["ratios"] = sim_ratios
                     #Calculate MSE
                     e_ratio_end = electrons.shape[0]/mc.N_e
-                    print(e_ratio_end-lab_cfg.Fill[k])
+                    print(e_ratio_end, lab_cfg.Fill[k])
                     ER.append(abs(e_ratio_end-lab_cfg.Fill[k]))
                     SE.append((e_ratio_end-lab_cfg.Fill[k])**2)
+                    if j == 1 and abs(ER[-1]-ER[-2]) > 0.4:
+                        print("Significant change detected in error ratio for same simulation.")
             MSE = np.mean(SE)
             avgER = np.mean(ER)
             print(f"absError: {avgER}, MSE: {MSE} with params: \n rho' = {run_cfg.exp_type_fp.rho_prime}, E = {run_cfg.physics_fp.E}, b = {run_cfg.physics_fp.b}, alpha = {phys.alpha},holes= {run_cfg.exp_type_fp.holes}")
+            if avgER < 0.3:
+                plot_e_ratio_timeseries(lab_cfg, plot_data)
             return MSE
 
 def sim_lab_TL_residuals_iso(run_cfg):
@@ -614,17 +669,17 @@ def sim_lab_TL_residuals_iso(run_cfg):
                     dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                     timebin = np.zeros(mc.steps)           
                     distances = calc_distances(electrons, holes)
+                    T = lab_cfg[lab_cfg["exp_no"]==k]["temp"].iloc[0]+273.15
                     if distances.size != 0:
                         min_distances, hole_index = min_distance(distances)
                     
                         #find lifetime of all electrons
-                        lifetime = lifetime_tunneling(run_cfg, min_distances) #this needs to be updated for changing number of electrons 
+                        lifetime = lifetime_thermal(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
                         recombination = np.random.exponential(lifetime)
                     else:
                         recombination = np.array([])     
                     i=0
                     t0 = 0 #check whether t0 is correct (how it is reset)
-                    T = lab_cfg[lab_cfg["exp_no"]==k]["temp"].iloc[0]+273.15
                     duration = np.max(lab_cfg[lab_cfg["exp_no"]==k]["time"])
                     obs_times = lab_cfg[lab_cfg["exp_no"]==k]["time"].to_numpy() #this is all the times at which we have data to compare with
                     e_ratio = np.zeros(obs_times.shape[0]) #bucket to calc e_ration at specific times
@@ -689,3 +744,65 @@ def sim_lab_TL_residuals_iso(run_cfg):
                 print("what")
             print(f"absError: {avgER}, MSE: {MSE} with params: \n rho' = {run_cfg.exp_type_fp.rho_prime}, E = {run_cfg.physics_fp.E}, b = {run_cfg.physics_fp.b}, alpha = {phys.alpha},holes= {run_cfg.exp_type_fp.holes}")
             return MSE
+
+
+
+
+
+def plot_e_ratio_timeseries(lab_cfg, plot_data):
+    """
+    lab_cfg: a pandas DataFrame with at least one column "T_end"
+    plot_data: a dict, keyed by the same indices as lab_cfg, where
+               plot_data[k] = {"times": [...], "ratios": [...]}
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # 1. Gather all T_end values used in lab_cfg (one per row)
+    #    For each k in plot_data, we read off the T_end from lab_cfg.
+    T_ends = [lab_cfg["T_end"][k] for k in plot_data.keys()]
+
+    # 2. Create a sorted list of unique T_end values
+    unique_ends = sorted(set(T_ends))
+
+    # 3. Build a color map that has as many distinct colors as unique T_end values
+    cmap = plt.cm.get_cmap('viridis', len(unique_ends))
+
+    #    Create a dictionary: T_end -> color
+    color_map = {val: cmap(i) for i, val in enumerate(unique_ends)}
+
+    # 4. Sort plot_data items by T_end (so lines plot in ascending T_end order)
+    #    Note: x[0] is the key 'k', so we find its T_end in lab_cfg.
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: lab_cfg["T_end"][x[0]])
+
+    # 5. We'll collect line handles in a dict so we can build a "unique" legend later
+    handles_dict = {}
+
+    # 6. Plot each time series using the color associated with its T_end
+    for k, data in sorted_plot_data:
+        t_end = lab_cfg["T_end"][k]
+        color = color_map[t_end]
+        
+        # Plot the time vs. ratio
+        line = ax.plot(data["times"], data["ratios"], color=color,
+                       label=f"Cfg {t_end}")  # temporary label
+        
+        # If we haven't seen this t_end before, store the handle for the legend
+        if t_end not in handles_dict:
+            handles_dict[t_end] = line
+
+    # 7. Build a custom legend so each T_end is shown only once
+    handles = []
+    labels = []
+    for val in unique_ends:
+        if val in handles_dict:
+            handles.append(handles_dict[val][0])  # line is a list of Line2D
+            labels.append(f"Cfg {val}")
+    ax.legend(handles, labels, title="T_end")
+
+    # 8. Final labeling
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Electron Ratio (electrons / N_e)")
+    ax.set_title("Evolution of Electron Ratio Over Time for Each Outer Loop")
+
+    plt.show()

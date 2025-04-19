@@ -1,16 +1,10 @@
 name: TL
 exp_type: lab_TL
-#T_start: [300,300,300,300,300,300,300,300,300,300,300,300,300,300] #[C] celsius
-#T_end: [275,250,225,200,175,150,125,100,75,50,25,250,150,50]
- 
-#time
-#duration: [1086,2171.55266,3257.32899,4343,5429,6514.65798,7600,8686,9772,10858,11944,2171.55266,6514.65798,10858] #[s]
-
 #sims
 sims: 2
-electrons: 200 #number of electrons
-holes: 200 #number of traps inside box
-N_e: 200 #max number of electron traps #not sure about this value
+electrons: 100 #number of electrons
+holes: 100 #number of traps inside box
+N_e: 100 #max number of electron traps #not sure about this value
 
 #box # 
 rho_prime: 0 #1e-7 #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
