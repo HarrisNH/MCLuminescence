@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from paths import PROJECT_ROOT
 import pandas as pd
+from matplotlib.lines import Line2D
+
 
 
 def initialize_runs(cfg):
@@ -759,8 +761,6 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
             avgER = np.mean(ER)
             printer(run_cfg, avgER, MSE)
             if PLOT:
-                plot_data.to_csv(f"{PROJECT_ROOT}/results/sims/{lab_data}_best_sim.csv")
-            if MSE < 0.005:
                 rows = []
                 for sim_id, data in plot_data.items():
                     for t, r in zip(data["times"], data["ratios"]):
@@ -771,11 +771,9 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
                         })
 
                 df = pd.DataFrame(rows)
-
                 # write to CSV
                 df.to_csv(f"{PROJECT_ROOT}/results/sims/iso_data.csv", index=False)
-                #plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
-
+                plot_e_ratio_timeseries_iso(lab_cfg, df,lab_data)
             return MSE
 
 def printer(run_cfg, avgER, MSE):
@@ -881,7 +879,69 @@ def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type,plot_type = "slim"):
 
     # 8. Final labeling
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Electron Ratio (electrons / N_e)")
+    ax.set_ylabel("Ratio of filled electron traps")
     ax.set_ylim(0,1)
-    ax.set_title(f"Evolution of Electron Ratio Over Time for Each Outer Loop\n {exp_type} ")
+    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.svg")
+
+
+def plot_e_ratio_timeseries_iso(lab_cfg, df,exp_type,plot_type = "slim"):
+    L0 = 1.52 # Luminescence filling constant
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    n = lab_cfg["exp_no"].nunique()
+    cmap = plt.get_cmap("tab10")          # up to 10 very distinct colors
+    col = cmap(np.arange(n)) 
+    for i in range(lab_cfg["exp_no"].iloc[-1]):
+        sim_data = df[df["simulation"]==i]
+        lab_data = lab_cfg[lab_cfg["exp_no"]==i]/L0
+        plt.plot(lab_data["time"], sim_data["ratio"], linestyle="None", marker="o", label=f"Temp {lab_data['temp'].iloc[0]}",color=col[i])
+        ax.scatter(
+        lab_data["time"], lab_data["L"],
+        color=col[i], marker="x", label="Observed",
+        zorder=10
+        )  
+        
+    plt.xscale("log")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Ratio of filled electron traps")
+    ax.set_ylim(0,1)
+    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
+    
+    # 1) a little legend box for the temperatures
+    temp_handles = []
+    # pull out the unique experiment numbers & temps in the same order you plotted them
+    exp_nos = lab_cfg["exp_no"].unique()
+    temps   = [lab_cfg[lab_cfg["exp_no"]==i]["temp"].iloc[0] for i in exp_nos]
+    # and your col array was built over the same length
+    for i, T in enumerate(temps):
+        temp_handles.append(
+            Line2D([0],[0],
+                linestyle="None", marker="o", 
+                color=col[i], markersize=8,
+                label=f"Temperature: {T} °C")
+        )
+    # place that legend in the upper right
+    temp_legend = ax.legend(handles=temp_handles,
+                            title="Experiment Temperatures",
+                            loc="center left",
+                            frameon=True)
+    ax.add_artist(temp_legend)
+
+
+    # 2) a second legend box for “simulated vs lab”
+    data_handles = [
+        Line2D([0],[0],
+            linestyle="None", marker="o",
+            color="gray", markersize=8,
+            label="Simulated data"),
+        Line2D([0],[0],
+            linestyle="None", marker="x",
+            color="black", markersize=8,
+            label="Lab data")
+    ]
+    ax.legend(handles=data_handles,
+            loc="lower right",
+            frameon=True)
+
     plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.svg")
