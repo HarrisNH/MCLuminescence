@@ -15,6 +15,7 @@ def extract_data_TL(sample:str = "CLBR"):
     data["T_end"] = data["Temp_end"]
     data["Fill"] = data["n/N_calc_from_DRCsatlevel"]
     data["e_ratio"] = 0
+    data.drop_duplicates(subset=["T_end"],keep='first',inplace=True)
     data[["Duration", "T_start", "T_end", "Fill", "e_ratio"]].to_csv(f"{PROJECT_ROOT}/data/processed/{sample}_IRSL50_0.25KperGy.csv", index=False)
 
 
@@ -99,7 +100,7 @@ def plot_TL_data():
     plt.show()
 
 
-extract_data_TL("FSM-13")
+extract_data_TL("CLBR")
 plot_TL_data()
 plot_iso_data()
 extract_data_TL_iso(L0=1.52)

@@ -563,9 +563,7 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
 
             # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
             plot_data = {}
-            #sim_times_full = []  
-            #sim_temp = []
-            #sim_n_electrons_full = []
+            plot_data_full = {}
             for k in range(len(lab_cfg)):
                 e_ratio_start = lab_cfg["e_ratio"].iloc[k]
                 # Create local lists to record time and electron ratio for this simulation run.
@@ -574,6 +572,7 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
                 
                 # Initialize dictionary entry for this outer loop
                 plot_data[k] = {"times": [], "ratios": []}
+                plot_data_full[k] = {"times": [], "ratios": []}
                 for j in range(mc.sims):
                     electrons, holes,box_dim = initialize_box_bg(run_cfg, e_ratio_start)
                     e_timer = np.zeros(electrons.shape[0])
@@ -592,11 +591,8 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
                         recombination = np.array([])     
                     i=0
                     t0 = 0 #check whether t0 is correct (how it is reset)
-                    
                     T_rate = (lab_cfg.T_end[k]-lab_cfg.T_start[k])/lab_cfg.Duration[k]
                     while timebin[i-1]<lab_cfg.Duration[k]:
-
-                        #timenow = timebin[i-1]
                         #Time step is decided by time until next recombination or filling event
                         dt_recomb = np.min((recombination + e_timer[:recombination.shape[0]])-timebin[i-1]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
                         dt = np.min((dt_recomb,dt_filling-t0))#2C max step
@@ -604,19 +600,8 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
                         if dt == dt_filling-t0:
                             dt = max((dt,0))
                             T = T + dt*T_rate
-                            
-                            #delete this block
-                            sim_temp.append(T)
-                            if i>1:
-                                if sim_temp[-1]> sim_temp[-2]:
-                                    print("Temperature increased")
-
                             timebin[i] = timebin[i - 1] + dt
-                            if timebin[i] < timebin[i-1]:
-                                print("Time step is negative")
                             t0 = 0
-
-                            #if np.random.rand(1)+1 > ratio_traps:
                             electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
                             e_timer = np.append(e_timer,timebin[i])
                             distances = recalc_distances(electrons, holes,distances)
@@ -647,29 +632,26 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
                             recombination = np.random.exponential(lifetime)
                                                 # Record the current electron ratio and simulation time.
                         e_ratio_current = electrons.shape[0] / mc.N_e
-                        sim_times.append(timebin[i])
-                        #sim_times_full.append(timebin[i])
-                        #sim_n_electrons_full.append(electrons.shape[0])
-                        sim_ratios.append(e_ratio_current)
-                        #sim_temp.append(T)
-                        
 
-                        if T>600:
-                            print("Temperature exceeds 600 degrees")
                         i+=1
-                    plot_data[k]["times"] = sim_times
-                    plot_data[k]["ratios"] = sim_ratios
+                        sim_times.append(timebin[i-1])
+                        sim_ratios.append(e_ratio_current)
+                    if j == mc.sims-1:
+                        plot_data[k]["times"] = lab_cfg.Duration[k]
+                        plot_data[k]["ratios"] = np.mean(sim_ratios[-1])
+                        plot_data_full[k]["times"] = sim_times
+                        plot_data_full[k]["ratios"] = sim_ratios
                     #Calculate MSE
                     e_ratio_end = electrons.shape[0]/mc.N_e
                     #print(e_ratio_end, lab_cfg.Fill[k])
                     ER.append(abs(e_ratio_end-lab_cfg.Fill[k]))
                     SE.append((e_ratio_end-lab_cfg.Fill[k])**2)
-                    if j == 1 and abs(ER[-1]-ER[-2]) > 0.4:
-                        print("Significant change detected in error ratio for same simulation.")
+
             MSE = np.mean(SE)
             avgER = np.mean(ER)
             if PLOT:
                 plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
+                plot_e_ratio_timeseries(lab_cfg, plot_data_full,lab_data,plot_type = "full")
             printer(run_cfg, avgER, MSE)
             return MSE
 
@@ -679,10 +661,16 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
             lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/{lab_data}.csv")
             SE = []
             ER = []
-            print(f"rho': {mc.rho_prime}")
+            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
+            plot_data = {}
             for k in range(0,lab_cfg.exp_no.iloc[-1]):
                 e_ratio_start = lab_cfg[lab_cfg["exp_no"]==k]["e_ratio"].iloc[0]
-
+                # Create local lists to record time and electron ratio for this simulation run.
+                sim_times = []
+                sim_ratios = []
+                
+                #Initialize dictionary entry for this outer loop
+                plot_data[k] = {"times": [], "ratios": []}
                 for j in range(mc.sims):
                     electrons, holes,box_dim = initialize_box_bg(run_cfg,e_ratio_start)
                     e_timer = np.zeros(electrons.shape[0])
@@ -714,12 +702,14 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
                             timebin[i] = timebin[i - 1] + dt
                             #if np.random.rand(1)+1 > ratio_traps:
                             electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+
                             e_timer = np.append(e_timer,timebin[i])
                             distances = recalc_distances(electrons, holes,distances)
                             min_distances, hole_index = min_distance(distances)
                             lifetime = lifetime_fading(run_cfg, min_distances,T)
                             recombination = np.random.exponential(lifetime)
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+
                             #else:
                             #    pass
                         elif dt == dt_recomb:
@@ -746,9 +736,15 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
                             SE.append((e_ratio-e_ratio_observed)**2)
                             ER.append(abs(e_ratio-e_ratio_observed))
                             obs_times = np.delete(obs_times,0)
+                            sim_times.append(timebin[i])
+                            sim_ratios.append(e_ratio)
+                            
                             if len(obs_times) == 0:
                                 break
+
                         i+=1
+                    plot_data[k]["times"] = sim_times
+                    plot_data[k]["ratios"] = sim_ratios
                     if len(obs_times)!= 0:
                         print(f"Sim ran for {timebin[i-1]} but real experiment ran for {obs_times[-1]} with {electrons.shape[0]} electrons, loop  {i}")
                         
@@ -763,7 +759,23 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
             avgER = np.mean(ER)
             printer(run_cfg, avgER, MSE)
             if PLOT:
-                plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
+                plot_data.to_csv(f"{PROJECT_ROOT}/results/sims/{lab_data}_best_sim.csv")
+            if MSE < 0.005:
+                rows = []
+                for sim_id, data in plot_data.items():
+                    for t, r in zip(data["times"], data["ratios"]):
+                        rows.append({
+                            "simulation": sim_id,
+                            "time": t,
+                            "ratio": r
+                        })
+
+                df = pd.DataFrame(rows)
+
+                # write to CSV
+                df.to_csv(f"{PROJECT_ROOT}/results/sims/iso_data.csv", index=False)
+                #plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
+
             return MSE
 
 def printer(run_cfg, avgER, MSE):
@@ -775,19 +787,30 @@ def printer(run_cfg, avgER, MSE):
             
 
 
-def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type):
+def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type,plot_type = "slim"):
     """
     lab_cfg: a pandas DataFrame with at least one column "T_end"
     plot_data: a dict, keyed by the same indices as lab_cfg, where
                plot_data[k] = {"times": [...], "ratios": [...]}
     """
-
+    L0 = 1.52 # Luminescence filling constant
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # 1. Gather all T_end values used in lab_cfg (one per row)
     #    For each k in plot_data, we read off the T_end from lab_cfg.
-    T_ends = [lab_cfg["T_end"][k] for k in plot_data.keys()]
+    try:
+        T_ends = [lab_cfg["T_end"][k] for k in plot_data.keys()]
+    except KeyError as e:
+        try:
+            lab_cfg["T_end"] = lab_cfg["temp"]
+            T_ends = [lab_cfg["T_end"].iloc[k] for k in plot_data.keys()]
+        except KeyError as e:
+            raise KeyError("lab_cfg must contain a column 'T_end' or 'temp'") from e
 
+    try:
+        lab_cfg["Duration"] = lab_cfg["time"]
+    except KeyError as e:
+        print("Attempting to plot")
     # 2. Create a sorted list of unique T_end values
     unique_ends = sorted(set(T_ends))
 
@@ -805,18 +828,30 @@ def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type):
     handles_dict = {}
 
     # 6. Plot each time series using the color associated with its T_end
+    CUTOFF = 17000 #just bcs we have this 1e20 duration that sometimes get used to stop sims
     for k, data in sorted_plot_data:
+        times = np.array(data["times"])
+        ratios = np.array(data["ratios"])
+        # build a mask of all points ≤ cutoff
+        mask = times <= CUTOFF
+            # if nothing left, skip this curve entirely
+        if not mask.any():
+            continue
+        # apply the mask
+        times_filt  = times[mask]
+        ratios_filt = ratios[mask]
         t_end = lab_cfg["T_end"][k]
         color = color_map[t_end]
-        
-        # Plot the time vs. ratio
-        line = ax.plot(data["times"], data["ratios"], color=color,
-                       label=f"Cfg {t_end}")  # temporary label
-        # Mark the end point with a distinct marker
-        ax.plot(data["times"][-1], data["ratios"][-1],
+
+        # plot the filtered curve
+        line = ax.plot(times_filt, ratios_filt, color=color,
+                    label=f"T_end = {t_end}C")
+
+        # mark the last (filtered) point  
+        ax.plot(times_filt[-1], ratios_filt[-1],
                 marker='o', markersize=8, markeredgecolor='black',
-                markerfacecolor=color, linestyle='None')
-        
+                markerfacecolor=color, linestyle='')
+            
         # If we haven't seen this t_end before, store the handle for the legend
         if t_end not in handles_dict:
             handles_dict[t_end] = line
@@ -827,9 +862,13 @@ def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type):
     for val in unique_ends:
         if val in handles_dict:
             handles.append(handles_dict[val][0])
-            labels.append(f"Cfg {val}")
+            labels.append(f"{val}C")
 
     # 8. Plot observed laboratory values on the same axes
+    try:
+        lab_cfg["Fill"] = lab_cfg["L"]/L0
+    except KeyError as e:
+        print("Attempting to plot")
     obs_handle = ax.scatter(
         lab_cfg["Duration"], lab_cfg["Fill"],
         color="red", marker="x", label="Observed",
@@ -838,10 +877,11 @@ def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type):
     handles.append(obs_handle)
     labels.append("Observed")
 
-    ax.legend(handles, labels, title="T_end")
+    ax.legend(handles, labels, title="T_end:")
 
     # 8. Final labeling
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Electron Ratio (electrons / N_e)")
-    ax.set_title("Evolution of Electron Ratio Over Time for Each Outer Loop")
-    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}.svg")
+    ax.set_ylim(0,1)
+    ax.set_title(f"Evolution of Electron Ratio Over Time for Each Outer Loop\n {exp_type} ")
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.svg")

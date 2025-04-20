@@ -1,7 +1,7 @@
 name: TL
 exp_type: lab_TL
 #sims
-sims: 2
+sims: 1
 electrons: 100 #number of electrons
 holes: 100 #number of traps inside box
 N_e: 100 #max number of electron traps #not sure about this value
