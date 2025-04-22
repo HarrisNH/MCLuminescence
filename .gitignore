@@ -175,4 +175,4 @@ cython_debug/
 .vscode/
 
 # hydra
-outputs/
+outputs/venvmc/
