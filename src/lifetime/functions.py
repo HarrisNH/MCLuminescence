@@ -330,7 +330,7 @@ def reduce_recombination_idx(hole_index, recombination_idx):
             filtered_idx.append(idx)
     return np.array(filtered_idx)
 
-def recomber(cfg,recombination,electrons,holes,hole_index,distances,min_distances,time,e_timer):
+def recomber(cfg,recombination,electrons,holes,hole_index,distances,min_distances,time,e_timer=np.zeros([1,1])):
     """
     Recalculate the recombination time and remove the electron and hole that recombined
     """
@@ -351,10 +351,9 @@ def recomber(cfg,recombination,electrons,holes,hole_index,distances,min_distance
 
     if electrons_new_d.shape[0] > 0:  
         min_distances[electrons_new_d], hole_index[electrons_new_d] = min_distance(distances[electrons_new_d])
-        lifetime = lifetime_tunneling(cfg, min_distances[electrons_new_d])
-        recombination[electrons_new_d] = np.random.exponential(lifetime)
-    #if holes.shape[0] == 0: #if no holes set next recombination very far out since there can be no recombination
-    #    recombination = recombination+1e20
+        #lifetime_electrons_new_d = lifetime_fading(cfg, min_distances[electrons_new_d],T)
+        #recombination[electrons_new_d] = np.random.exponential(lifetime_electrons_new_d)
+        #e_timer[electrons_new_d] = np.zeros(electrons_new_d.shape)
     return distances, electrons, holes,hole_index,min_distances,recombination,Lum,e_timer
 
 
@@ -386,6 +385,377 @@ def results_temp(run_cfg, Lum, timebin, electrons, Lum_sec, Lum_celsius, loop):
     #lifetime_plot(run_cfg, Lum_sec[:time_passed,j,key])
     return x_ax_celsius, Lum_celsius
 
+def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = False):
+            mc = run_cfg.exp_type_fp
+            phys = run_cfg.physics_fp
+            lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/{lab_data}.csv")
+            SE = []
+            ER = []
+            TSS = []
+            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
+            plot_data = {}
+            plot_data_full = {}
+            for k in range(len(lab_cfg)):
+                e_ratio_start = lab_cfg["e_ratio"].iloc[k]
+                # Create local lists to record time and electron ratio for this simulation run.
+                sim_times = []
+                sim_ratios = []
+                
+                # Initialize dictionary entry for this outer loop
+                plot_data[k] = {"times": [], "ratios": []}
+                plot_data_full[k] = {"times": [], "ratios": []}
+                for j in range(mc.sims):
+                    electrons, holes,box_dim = initialize_box_bg(run_cfg, e_ratio_start)
+                    D = phys.D
+                    dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                    timebin = np.zeros(mc.steps)       
+                    T = lab_cfg.T_start[k]+273.15    
+                    distances = calc_distances(electrons, holes)
+                    if distances.size != 0:
+                        min_distances, hole_index = min_distance(distances)
+                    
+                        #find lifetime of all electrons
+                        lifetime = lifetime_fading(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
+                        recombination = np.random.exponential(lifetime)
+                    else:
+                        recombination = np.array([])     
+                    i=0
+                    T_rate = (lab_cfg.T_end[k]-lab_cfg.T_start[k])/lab_cfg.Duration[k]
+                    while timebin[i-1]<lab_cfg.Duration[k]:
+                        #Time step is decided by time until next recombination or filling event
+                        dt_recomb = np.min(recombination) if recombination.size > 0 else dt_filling #check this timebin subtraction
+                        dt = np.min((dt_recomb,dt_filling))#2C max step
+
+                        if dt == dt_filling:
+                            dt = max((dt,0))
+                            T = T + dt*T_rate
+                            timebin[i] = timebin[i - 1] + dt
+
+                            electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
+                            distances = recalc_distances(electrons, holes,distances)
+                            min_distances, hole_index = min_distance(distances)
+                            lifetime = lifetime_fading(run_cfg, min_distances,T)
+                            recombination = np.random.exponential(lifetime)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                        else:
+                            dt = np.max((dt,0))
+                            T = T + dt*T_rate
+                            timebin[i] = timebin[i - 1] + dt
+                            #Handle recombination event
+                            distances, electrons, holes,hole_index,min_distances,_,_,_ = recomber(run_cfg,
+                                recombination,electrons,holes,hole_index,distances,min_distances,timebin[i])
+                            
+                            #Recalculate waiting times:
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                            lifetime = lifetime_fading(run_cfg, min_distances,T)
+                            recombination = np.random.exponential(lifetime)
+                                                # Record the current electron ratio and simulation time.
+                        e_ratio_current = electrons.shape[0] / mc.N_e
+
+                        i+=1
+                        sim_times.append(timebin[i-1])
+                        sim_ratios.append(e_ratio_current)
+                    if j == mc.sims-1:
+                        plot_data[k]["times"] = lab_cfg.Duration[k]
+                        plot_data[k]["ratios"] = np.mean(sim_ratios[-1])
+                        plot_data_full[k]["times"] = sim_times
+                        plot_data_full[k]["ratios"] = sim_ratios
+                    #Calculate MSE
+                    e_ratio_end = electrons.shape[0]/mc.N_e
+                    #print(e_ratio_end, lab_cfg.Fill[k])
+                    ER.append(abs(e_ratio_end-lab_cfg.Fill[k]))
+                    SE.append((e_ratio_end-lab_cfg.Fill[k])**2)
+                    TSS.append((lab_cfg.Fill[k]-np.mean(lab_cfg.Fill))**2)
+            MSE = np.mean(SE)
+            R2 = 1 - (np.sum(SE) / np.sum(TSS))
+            #print("R2:", R2)
+            avgER = np.mean(ER)
+            if PLOT:
+                plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
+                plot_e_ratio_timeseries(lab_cfg, plot_data_full,lab_data,plot_type = "full")
+            printer(run_cfg, avgER, MSE)
+            return MSE
+
+def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool = False):
+            mc = run_cfg.exp_type_fp
+            phys = run_cfg.physics_fp
+            lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/{lab_data}.csv")
+            SE = []
+            ER = []
+            TSS = []
+            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
+            plot_data = {}
+            for k in range(0,lab_cfg.exp_no.iloc[-1]):
+                e_ratio_start = lab_cfg[lab_cfg["exp_no"]==k]["e_ratio"].iloc[0]
+                # Create local lists to record time and electron ratio for this simulation run.
+                sim_times = []
+                sim_ratios = []
+                
+                #Initialize dictionary entry for this outer loop
+                plot_data[k] = {"times": [], "ratios": []}
+                for j in range(mc.sims):
+                    electrons, holes,box_dim = initialize_box_bg(run_cfg,e_ratio_start)
+                    D = lab_cfg[lab_cfg["exp_no"]==k]["dose"].iloc[0]
+                    dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                    timebin = np.zeros(mc.steps)           
+                    distances = calc_distances(electrons, holes)
+                    T = lab_cfg[lab_cfg["exp_no"]==k]["temp"].iloc[0]+273.15
+                    if distances.size != 0:
+                        min_distances, hole_index = min_distance(distances)
+                    
+                        #find lifetime of all electrons
+                        lifetime = lifetime_fading(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
+                        recombination = np.random.exponential(lifetime)
+                    else:
+                        recombination = np.array([])     
+                    i=0
+                    duration = np.max(lab_cfg[lab_cfg["exp_no"]==k]["time"])
+                    obs_times = lab_cfg[lab_cfg["exp_no"]==k]["time"].to_numpy() #this is all the times at which we have data to compare with
+                    e_ratio = np.zeros(obs_times.shape[0]) #bucket to calc e_ration at specific times
+                    while timebin[i-1] < duration:
+                        #timenow = timebin[i-1]
+                        #Time step is decided by time until next recombination or filling event
+                        dt_recomb = np.min(recombination) if recombination.size > 0 else dt_filling
+                        dt = np.min((dt_recomb,dt_filling))#2C max step
+                        if dt == dt_filling:
+                            timebin[i] = timebin[i - 1] + dt
+                            #if np.random.rand(1)+1 > ratio_traps:
+                            electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                            distances = recalc_distances(electrons, holes,distances)
+                            min_distances, hole_index = min_distance(distances)
+                            lifetime = lifetime_fading(run_cfg, min_distances,T)
+                            recombination = np.random.exponential(lifetime)
+
+                        elif dt == dt_recomb:
+                            dt = np.max((dt,0))
+                            timebin[i] = timebin[i - 1] + dt
+
+                            #Handle recombination event
+                            distances, electrons, holes,hole_index,min_distances,_,_,_ = recomber(run_cfg,
+                                recombination,electrons,holes,hole_index,distances,min_distances,timebin[i])
+                            
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
+                            #Recalculate distances for electrons that shared the recombined hole
+                            lifetime = lifetime_fading(run_cfg, min_distances,T)
+                            recombination = np.random.exponential(lifetime)
+                        while timebin[i]>obs_times[0]:
+                            #Calculate MSE
+                            e_ratio = electrons.shape[0]/mc.N_e
+                            e_ratio_observed = (lab_cfg[(lab_cfg["exp_no"]==k) & (lab_cfg["time"]==obs_times[0])]["e_ratio"].iloc[0])
+                            SE.append((e_ratio-e_ratio_observed)**2)
+                            TSS.append((e_ratio_observed-np.mean((lab_cfg[(lab_cfg["exp_no"]==k) & (lab_cfg["time"]==obs_times[0])]["e_ratio"]))**2))
+                            ER.append(abs(e_ratio-e_ratio_observed))
+                            obs_times = np.delete(obs_times,0)
+                            sim_times.append(timebin[i])
+                            sim_ratios.append(e_ratio)
+                            
+                            if len(obs_times) == 0:
+                                break
+
+                        i+=1
+                    plot_data[k]["times"] = sim_times
+                    plot_data[k]["ratios"] = sim_ratios
+                    if len(obs_times)!= 0:
+                        print(f"Sim ran for {timebin[i-1]} but real experiment ran for {obs_times[-1]} with {electrons.shape[0]} electrons, loop  {i}")
+                        
+    
+                    #Calculate MSE
+                    #e_ratio_end = electrons.shape[0]/mc.N_e
+                    #e_ratio_observed = lab_cfg[lab_cfg["exp_no"]==k]["L"]
+                    #print(e_ratio_end-lab_cfg.Fill[k])
+                    
+                    #SE.append((e_ratio_end-lab_cfg.L[k])**2)
+            MSE = np.mean(SE)
+            R2 = 1 - (np.sum(SE)/np.sum(TSS))
+            #print(f"R2 is {R2}")
+            avgER = np.mean(ER)
+            printer(run_cfg, avgER, MSE)
+            if PLOT:
+                rows = []
+                for sim_id, data in plot_data.items():
+                    for t, r in zip(data["times"], data["ratios"]):
+                        rows.append({
+                            "simulation": sim_id,
+                            "time": t,
+                            "ratio": r
+                        })
+
+                df = pd.DataFrame(rows)
+                # write to CSV
+                df.to_csv(f"{PROJECT_ROOT}/results/sims/iso_data.csv", index=False)
+                plot_e_ratio_timeseries_iso(lab_cfg, df,lab_data)
+            return MSE
+
+def printer(run_cfg, avgER, MSE):
+    print(f"""absError: {avgER}, MSE: {MSE} with params: 
+        rho_prime = {run_cfg.exp_type_fp.rho_prime}, E_cb = {run_cfg.physics_fp.E_cb}, 
+        E_loc = {run_cfg.physics_fp.E_loc}, s = {run_cfg.physics_fp.s}, b = {run_cfg.physics_fp.b}, 
+        alpha = {run_cfg.physics_fp.alpha},holes= {run_cfg.exp_type_fp.holes}""")
+    print('\033[5A')
+            
+
+
+def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type,plot_type = "slim"):
+    """
+    lab_cfg: a pandas DataFrame with at least one column "T_end"
+    plot_data: a dict, keyed by the same indices as lab_cfg, where
+               plot_data[k] = {"times": [...], "ratios": [...]}
+    """
+    L0 = 1.52 # Luminescence filling constant
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # 1. Gather all T_end values used in lab_cfg (one per row)
+    #    For each k in plot_data, we read off the T_end from lab_cfg.
+    try:
+        T_ends = [lab_cfg["T_end"][k] for k in plot_data.keys()]
+    except KeyError as e:
+        try:
+            lab_cfg["T_end"] = lab_cfg["temp"]
+            T_ends = [lab_cfg["T_end"].iloc[k] for k in plot_data.keys()]
+        except KeyError as e:
+            raise KeyError("lab_cfg must contain a column 'T_end' or 'temp'") from e
+
+    try:
+        lab_cfg["Duration"] = lab_cfg["time"]
+    except KeyError as e:
+        print("Attempting to plot")
+    # 2. Create a sorted list of unique T_end values
+    unique_ends = sorted(set(T_ends))
+
+    # 3. Build a color map that has as many distinct colors as unique T_end values
+    cmap = plt.cm.get_cmap('viridis', len(unique_ends))
+
+    #    Create a dictionary: T_end -> color
+    color_map = {val: cmap(i) for i, val in enumerate(unique_ends)}
+
+    # 4. Sort plot_data items by T_end (so lines plot in ascending T_end order)
+    #    Note: x[0] is the key 'k', so we find its T_end in lab_cfg.
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: lab_cfg["T_end"][x[0]])
+
+    # 5. We'll collect line handles in a dict so we can build a "unique" legend later
+    handles_dict = {}
+
+    # 6. Plot each time series using the color associated with its T_end
+    CUTOFF = 17000 #just bcs we have this 1e20 duration that sometimes get used to stop sims
+    for k, data in sorted_plot_data:
+        times = np.array(data["times"])
+        ratios = np.array(data["ratios"])
+        # build a mask of all points ≤ cutoff
+        mask = times <= CUTOFF
+            # if nothing left, skip this curve entirely
+        if not mask.any():
+            continue
+        # apply the mask
+        times_filt  = times[mask]
+        ratios_filt = ratios[mask]
+        t_end = lab_cfg["T_end"][k]
+        color = color_map[t_end]
+
+        # plot the filtered curve
+        line = ax.plot(times_filt, ratios_filt, color=color,
+                    label=f"T_end = {t_end}C")
+
+        # mark the last (filtered) point  
+        ax.plot(times_filt[-1], ratios_filt[-1],
+                marker='o', markersize=8, markeredgecolor='black',
+                markerfacecolor=color, linestyle='')
+            
+        # If we haven't seen this t_end before, store the handle for the legend
+        if t_end not in handles_dict:
+            handles_dict[t_end] = line
+
+    # 7. Build a custom legend so each T_end is shown only once
+    handles = []
+    labels = []
+    for val in unique_ends:
+        if val in handles_dict:
+            handles.append(handles_dict[val][0])
+            labels.append(f"{val}C")
+
+    # 8. Plot observed laboratory values on the same axes
+    try:
+        lab_cfg["Fill"] = lab_cfg["L"]/L0
+    except KeyError as e:
+        print("Attempting to plot")
+    obs_handle = ax.scatter(
+        lab_cfg["Duration"], lab_cfg["Fill"],
+        color="red", marker="x", label="Observed",
+        zorder=10
+    )
+    handles.append(obs_handle)
+    labels.append("Observed")
+
+    ax.legend(handles, labels, title="T_end:")
+
+    # 8. Final labeling
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Ratio of filled electron traps")
+    ax.set_ylim(0,1)
+    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.png")
+
+
+def plot_e_ratio_timeseries_iso(lab_cfg, df,exp_type,plot_type = "slim"):
+    L0 = 1.52 # Luminescence filling constant
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    n = lab_cfg["exp_no"].nunique()
+    cmap = plt.get_cmap("tab10")          # up to 10 very distinct colors
+    col = cmap(np.arange(n)) 
+    for i in range(lab_cfg["exp_no"].iloc[-1]):
+        sim_data = df[df["simulation"]==i]
+        lab_data = lab_cfg[lab_cfg["exp_no"]==i]/L0
+        plt.plot(lab_data["time"], sim_data["ratio"], linestyle="None", marker="o", label=f"Temp {lab_data['temp'].iloc[0]}",color=col[i])
+        ax.scatter(
+        lab_data["time"], lab_data["L"],
+        color=col[i], marker="x", label="Observed",
+        zorder=10
+        )  
+        
+    plt.xscale("log")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Ratio of filled electron traps")
+    ax.set_ylim(0,1)
+    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
+    
+    # 1) a little legend box for the temperatures
+    temp_handles = []
+    # pull out the unique experiment numbers & temps in the same order you plotted them
+    exp_nos = lab_cfg["exp_no"].unique()
+    temps   = [lab_cfg[lab_cfg["exp_no"]==i]["temp"].iloc[0] for i in exp_nos]
+    # and your col array was built over the same length
+    for i, T in enumerate(temps):
+        temp_handles.append(
+            Line2D([0],[0],
+                linestyle="None", marker="o", 
+                color=col[i], markersize=8,
+                label=f"Temperature: {T} °C")
+        )
+    # place that legend in the upper right
+    temp_legend = ax.legend(handles=temp_handles,
+                            title="Experiment Temperatures",
+                            loc="center left",
+                            frameon=True)
+    ax.add_artist(temp_legend)
+
+
+    # 2) a second legend box for “simulated vs lab”
+    data_handles = [
+        Line2D([0],[0],
+            linestyle="None", marker="o",
+            color="gray", markersize=8,
+            label="Simulated data"),
+        Line2D([0],[0],
+            linestyle="None", marker="x",
+            color="black", markersize=8,
+            label="Lab data")
+    ]
+    ax.legend(handles=data_handles,
+            loc="lower right",
+            frameon=True)
+
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.png")
 
 
 
@@ -554,394 +924,3 @@ def sim_lab_TL(run_cfg, Lum, x_ax, electron_ratio,key,exp_list):
 
                 x_ax[:,j,key] = timebin
             return x_ax, Lum, electron_ratio
-
-
-def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = False):
-            mc = run_cfg.exp_type_fp
-            phys = run_cfg.physics_fp
-            lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/{lab_data}.csv")
-            SE = []
-            ER = []
-
-            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
-            plot_data = {}
-            plot_data_full = {}
-            for k in range(len(lab_cfg)):
-                e_ratio_start = lab_cfg["e_ratio"].iloc[k]
-                # Create local lists to record time and electron ratio for this simulation run.
-                sim_times = []
-                sim_ratios = []
-                
-                # Initialize dictionary entry for this outer loop
-                plot_data[k] = {"times": [], "ratios": []}
-                plot_data_full[k] = {"times": [], "ratios": []}
-                for j in range(mc.sims):
-                    electrons, holes,box_dim = initialize_box_bg(run_cfg, e_ratio_start)
-                    e_timer = np.zeros(electrons.shape[0])
-                    D = phys.D
-                    dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                    timebin = np.zeros(mc.steps)       
-                    T = lab_cfg.T_start[k]+273.15    
-                    distances = calc_distances(electrons, holes)
-                    if distances.size != 0:
-                        min_distances, hole_index = min_distance(distances)
-                    
-                        #find lifetime of all electrons
-                        lifetime = lifetime_fading(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
-                        recombination = np.random.exponential(lifetime)
-                    else:
-                        recombination = np.array([])     
-                    i=0
-                    t0 = 0 #check whether t0 is correct (how it is reset)
-                    T_rate = (lab_cfg.T_end[k]-lab_cfg.T_start[k])/lab_cfg.Duration[k]
-                    while timebin[i-1]<lab_cfg.Duration[k]:
-                        #Time step is decided by time until next recombination or filling event
-                        dt_recomb = np.min((recombination + e_timer[:recombination.shape[0]])-timebin[i-1]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
-                        dt = np.min((dt_recomb,dt_filling-t0))#2C max step
-
-                        if dt == dt_filling-t0:
-                            dt = max((dt,0))
-                            T = T + dt*T_rate
-                            timebin[i] = timebin[i - 1] + dt
-                            t0 = 0
-                            electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
-                            e_timer = np.append(e_timer,timebin[i])
-                            distances = recalc_distances(electrons, holes,distances)
-                            min_distances, hole_index = min_distance(distances)
-                            lifetime = lifetime_fading(run_cfg, min_distances,T)
-                            recombination = np.random.exponential(lifetime)
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                            #else:
-                            #    pass
-                        else:
-                            if  dt != dt_recomb:
-                                print("Time step is not equal to recombination time step")
-                            dt = np.max((dt,0))
-                            T = T + dt*T_rate
-
-                            timebin[i] = timebin[i - 1] + dt
-
-                            #Handle recombination event
-                            distances, electrons, holes,hole_index,min_distances,recombination,_,e_timer = recomber(run_cfg,
-                                recombination,electrons,holes,hole_index,distances,min_distances,timebin[i],e_timer)
-                            
-                            ###UPDATE THE FILLING when electrons are removed 
-                            #Update time since last filling as well as filling time
-                            t0 += dt
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                            #Recalculate distances for electrons that shared the recombined hole
-                            lifetime = lifetime_fading(run_cfg, min_distances,T)
-                            recombination = np.random.exponential(lifetime)
-                                                # Record the current electron ratio and simulation time.
-                        e_ratio_current = electrons.shape[0] / mc.N_e
-
-                        i+=1
-                        sim_times.append(timebin[i-1])
-                        sim_ratios.append(e_ratio_current)
-                    if j == mc.sims-1:
-                        plot_data[k]["times"] = lab_cfg.Duration[k]
-                        plot_data[k]["ratios"] = np.mean(sim_ratios[-1])
-                        plot_data_full[k]["times"] = sim_times
-                        plot_data_full[k]["ratios"] = sim_ratios
-                    #Calculate MSE
-                    e_ratio_end = electrons.shape[0]/mc.N_e
-                    #print(e_ratio_end, lab_cfg.Fill[k])
-                    ER.append(abs(e_ratio_end-lab_cfg.Fill[k]))
-                    SE.append((e_ratio_end-lab_cfg.Fill[k])**2)
-
-            MSE = np.mean(SE)
-            avgER = np.mean(ER)
-            if PLOT:
-                plot_e_ratio_timeseries(lab_cfg, plot_data,lab_data)
-                plot_e_ratio_timeseries(lab_cfg, plot_data_full,lab_data,plot_type = "full")
-            printer(run_cfg, avgER, MSE)
-            return MSE
-
-def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool = False):
-            mc = run_cfg.exp_type_fp
-            phys = run_cfg.physics_fp
-            lab_cfg  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/{lab_data}.csv")
-            SE = []
-            ER = []
-            # Dictionary to collect time and electron_ratio series for each outer loop (lab_cfg row)
-            plot_data = {}
-            for k in range(0,lab_cfg.exp_no.iloc[-1]):
-                e_ratio_start = lab_cfg[lab_cfg["exp_no"]==k]["e_ratio"].iloc[0]
-                # Create local lists to record time and electron ratio for this simulation run.
-                sim_times = []
-                sim_ratios = []
-                
-                #Initialize dictionary entry for this outer loop
-                plot_data[k] = {"times": [], "ratios": []}
-                for j in range(mc.sims):
-                    electrons, holes,box_dim = initialize_box_bg(run_cfg,e_ratio_start)
-                    e_timer = np.zeros(electrons.shape[0])
-                    D = lab_cfg[lab_cfg["exp_no"]==k]["dose"].iloc[0]
-                    dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                    timebin = np.zeros(mc.steps)           
-                    distances = calc_distances(electrons, holes)
-                    T = lab_cfg[lab_cfg["exp_no"]==k]["temp"].iloc[0]+273.15
-                    if distances.size != 0:
-                        min_distances, hole_index = min_distance(distances)
-                    
-                        #find lifetime of all electrons
-                        lifetime = lifetime_fading(run_cfg, min_distances,T) #this needs to be updated for changing number of electrons 
-                        recombination = np.random.exponential(lifetime)
-                    else:
-                        recombination = np.array([])     
-                    i=0
-                    t0 = 0 #check whether t0 is correct (how it is reset)
-                    duration = np.max(lab_cfg[lab_cfg["exp_no"]==k]["time"])
-                    obs_times = lab_cfg[lab_cfg["exp_no"]==k]["time"].to_numpy() #this is all the times at which we have data to compare with
-                    e_ratio = np.zeros(obs_times.shape[0]) #bucket to calc e_ration at specific times
-                    while timebin[i-1] < duration:
-                        #timenow = timebin[i-1]
-                        #Time step is decided by time until next recombination or filling event
-                        dt_recomb = np.min((recombination + e_timer[:recombination.shape[0]])-timebin[i-1]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
-                        dt = np.min((dt_recomb,dt_filling-t0))#2C max step
-                        if dt == dt_filling-t0:
-                            t0 = 0
-                            timebin[i] = timebin[i - 1] + dt
-                            #if np.random.rand(1)+1 > ratio_traps:
-                            electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-
-                            e_timer = np.append(e_timer,timebin[i])
-                            distances = recalc_distances(electrons, holes,distances)
-                            min_distances, hole_index = min_distance(distances)
-                            lifetime = lifetime_fading(run_cfg, min_distances,T)
-                            recombination = np.random.exponential(lifetime)
-
-                            #else:
-                            #    pass
-                        elif dt == dt_recomb:
-                            dt = np.max((dt,0))
-                            timebin[i] = timebin[i - 1] + dt
-                            if (np.where((timebin[i] >= recombination+e_timer))[0]).shape[0] > 1 and dt != 0:
-                                print("More than one recombination event at the same time")
-
-                            #Handle recombination event
-                            distances, electrons, holes,hole_index,min_distances,recombination,_,e_timer = recomber(run_cfg,
-                                recombination,electrons,holes,hole_index,distances,min_distances,timebin[i],e_timer)
-                            
-                            ###UPDATE THE FILLING when electrons are removed 
-                            #Update time since last filling as well as filling time
-                            t0 += dt
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
-                            #Recalculate distances for electrons that shared the recombined hole
-                            lifetime = lifetime_fading(run_cfg, min_distances,T)
-                            recombination = np.random.exponential(lifetime)
-                        while timebin[i]>obs_times[0]:
-                            #Calculate MSE
-                            e_ratio = electrons.shape[0]/mc.N_e
-                            e_ratio_observed = (lab_cfg[(lab_cfg["exp_no"]==k) & (lab_cfg["time"]==obs_times[0])]["e_ratio"].iloc[0])
-                            SE.append((e_ratio-e_ratio_observed)**2)
-                            ER.append(abs(e_ratio-e_ratio_observed))
-                            obs_times = np.delete(obs_times,0)
-                            sim_times.append(timebin[i])
-                            sim_ratios.append(e_ratio)
-                            
-                            if len(obs_times) == 0:
-                                break
-
-                        i+=1
-                    plot_data[k]["times"] = sim_times
-                    plot_data[k]["ratios"] = sim_ratios
-                    if len(obs_times)!= 0:
-                        print(f"Sim ran for {timebin[i-1]} but real experiment ran for {obs_times[-1]} with {electrons.shape[0]} electrons, loop  {i}")
-                        
-    
-                    #Calculate MSE
-                    #e_ratio_end = electrons.shape[0]/mc.N_e
-                    #e_ratio_observed = lab_cfg[lab_cfg["exp_no"]==k]["L"]
-                    #print(e_ratio_end-lab_cfg.Fill[k])
-                    
-                    #SE.append((e_ratio_end-lab_cfg.L[k])**2)
-            MSE = np.mean(SE)
-            avgER = np.mean(ER)
-            printer(run_cfg, avgER, MSE)
-            if PLOT:
-                rows = []
-                for sim_id, data in plot_data.items():
-                    for t, r in zip(data["times"], data["ratios"]):
-                        rows.append({
-                            "simulation": sim_id,
-                            "time": t,
-                            "ratio": r
-                        })
-
-                df = pd.DataFrame(rows)
-                # write to CSV
-                df.to_csv(f"{PROJECT_ROOT}/results/sims/iso_data.csv", index=False)
-                plot_e_ratio_timeseries_iso(lab_cfg, df,lab_data)
-            return MSE
-
-def printer(run_cfg, avgER, MSE):
-    print(f"""absError: {avgER}, MSE: {MSE} with params: 
-        rho_prime = {run_cfg.exp_type_fp.rho_prime}, E_cb = {run_cfg.physics_fp.E_cb}, 
-        E_loc = {run_cfg.physics_fp.E_loc}, s = {run_cfg.physics_fp.s}, b = {run_cfg.physics_fp.b}, 
-        alpha = {run_cfg.physics_fp.alpha},holes= {run_cfg.exp_type_fp.holes}""")
-    print('\033[5A')
-            
-
-
-def plot_e_ratio_timeseries(lab_cfg, plot_data,exp_type,plot_type = "slim"):
-    """
-    lab_cfg: a pandas DataFrame with at least one column "T_end"
-    plot_data: a dict, keyed by the same indices as lab_cfg, where
-               plot_data[k] = {"times": [...], "ratios": [...]}
-    """
-    L0 = 1.52 # Luminescence filling constant
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # 1. Gather all T_end values used in lab_cfg (one per row)
-    #    For each k in plot_data, we read off the T_end from lab_cfg.
-    try:
-        T_ends = [lab_cfg["T_end"][k] for k in plot_data.keys()]
-    except KeyError as e:
-        try:
-            lab_cfg["T_end"] = lab_cfg["temp"]
-            T_ends = [lab_cfg["T_end"].iloc[k] for k in plot_data.keys()]
-        except KeyError as e:
-            raise KeyError("lab_cfg must contain a column 'T_end' or 'temp'") from e
-
-    try:
-        lab_cfg["Duration"] = lab_cfg["time"]
-    except KeyError as e:
-        print("Attempting to plot")
-    # 2. Create a sorted list of unique T_end values
-    unique_ends = sorted(set(T_ends))
-
-    # 3. Build a color map that has as many distinct colors as unique T_end values
-    cmap = plt.cm.get_cmap('viridis', len(unique_ends))
-
-    #    Create a dictionary: T_end -> color
-    color_map = {val: cmap(i) for i, val in enumerate(unique_ends)}
-
-    # 4. Sort plot_data items by T_end (so lines plot in ascending T_end order)
-    #    Note: x[0] is the key 'k', so we find its T_end in lab_cfg.
-    sorted_plot_data = sorted(plot_data.items(), key=lambda x: lab_cfg["T_end"][x[0]])
-
-    # 5. We'll collect line handles in a dict so we can build a "unique" legend later
-    handles_dict = {}
-
-    # 6. Plot each time series using the color associated with its T_end
-    CUTOFF = 17000 #just bcs we have this 1e20 duration that sometimes get used to stop sims
-    for k, data in sorted_plot_data:
-        times = np.array(data["times"])
-        ratios = np.array(data["ratios"])
-        # build a mask of all points ≤ cutoff
-        mask = times <= CUTOFF
-            # if nothing left, skip this curve entirely
-        if not mask.any():
-            continue
-        # apply the mask
-        times_filt  = times[mask]
-        ratios_filt = ratios[mask]
-        t_end = lab_cfg["T_end"][k]
-        color = color_map[t_end]
-
-        # plot the filtered curve
-        line = ax.plot(times_filt, ratios_filt, color=color,
-                    label=f"T_end = {t_end}C")
-
-        # mark the last (filtered) point  
-        ax.plot(times_filt[-1], ratios_filt[-1],
-                marker='o', markersize=8, markeredgecolor='black',
-                markerfacecolor=color, linestyle='')
-            
-        # If we haven't seen this t_end before, store the handle for the legend
-        if t_end not in handles_dict:
-            handles_dict[t_end] = line
-
-    # 7. Build a custom legend so each T_end is shown only once
-    handles = []
-    labels = []
-    for val in unique_ends:
-        if val in handles_dict:
-            handles.append(handles_dict[val][0])
-            labels.append(f"{val}C")
-
-    # 8. Plot observed laboratory values on the same axes
-    try:
-        lab_cfg["Fill"] = lab_cfg["L"]/L0
-    except KeyError as e:
-        print("Attempting to plot")
-    obs_handle = ax.scatter(
-        lab_cfg["Duration"], lab_cfg["Fill"],
-        color="red", marker="x", label="Observed",
-        zorder=10
-    )
-    handles.append(obs_handle)
-    labels.append("Observed")
-
-    ax.legend(handles, labels, title="T_end:")
-
-    # 8. Final labeling
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Ratio of filled electron traps")
-    ax.set_ylim(0,1)
-    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
-    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.svg")
-
-
-def plot_e_ratio_timeseries_iso(lab_cfg, df,exp_type,plot_type = "slim"):
-    L0 = 1.52 # Luminescence filling constant
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    n = lab_cfg["exp_no"].nunique()
-    cmap = plt.get_cmap("tab10")          # up to 10 very distinct colors
-    col = cmap(np.arange(n)) 
-    for i in range(lab_cfg["exp_no"].iloc[-1]):
-        sim_data = df[df["simulation"]==i]
-        lab_data = lab_cfg[lab_cfg["exp_no"]==i]/L0
-        plt.plot(lab_data["time"], sim_data["ratio"], linestyle="None", marker="o", label=f"Temp {lab_data['temp'].iloc[0]}",color=col[i])
-        ax.scatter(
-        lab_data["time"], lab_data["L"],
-        color=col[i], marker="x", label="Observed",
-        zorder=10
-        )  
-        
-    plt.xscale("log")
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Ratio of filled electron traps")
-    ax.set_ylim(0,1)
-    ax.set_title(f"Evolution of Electron Ratio Over Time\n {exp_type} ")
-    
-    # 1) a little legend box for the temperatures
-    temp_handles = []
-    # pull out the unique experiment numbers & temps in the same order you plotted them
-    exp_nos = lab_cfg["exp_no"].unique()
-    temps   = [lab_cfg[lab_cfg["exp_no"]==i]["temp"].iloc[0] for i in exp_nos]
-    # and your col array was built over the same length
-    for i, T in enumerate(temps):
-        temp_handles.append(
-            Line2D([0],[0],
-                linestyle="None", marker="o", 
-                color=col[i], markersize=8,
-                label=f"Temperature: {T} °C")
-        )
-    # place that legend in the upper right
-    temp_legend = ax.legend(handles=temp_handles,
-                            title="Experiment Temperatures",
-                            loc="center left",
-                            frameon=True)
-    ax.add_artist(temp_legend)
-
-
-    # 2) a second legend box for “simulated vs lab”
-    data_handles = [
-        Line2D([0],[0],
-            linestyle="None", marker="o",
-            color="gray", markersize=8,
-            label="Simulated data"),
-        Line2D([0],[0],
-            linestyle="None", marker="x",
-            color="black", markersize=8,
-            label="Lab data")
-    ]
-    ax.legend(handles=data_handles,
-            loc="lower right",
-            frameon=True)
-
-    plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.svg")

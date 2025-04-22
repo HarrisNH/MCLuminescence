@@ -6,9 +6,18 @@ import matplotlib.pyplot as plt
 from paths import PROJECT_ROOT
 import pandas as pd
 import hydra
-
+import os
 from matplotlib import cm
 
+BOUNDS_FADING = [
+    (1e-8, 1e-3),  # rho_prime
+    (0.8,   2.2),  # E_cb
+    (0.5,   1.8),  # E_loc
+    (1e12, 1e14),  # s
+    (1e10, 1e13),  # b
+    (1e9,  5e10),  # alpha
+    (1e2,    750)  # holes
+]
 
 def initialize_runs(cfg):
     # Build the original dictionary of dictionaries
@@ -198,7 +207,126 @@ def analytical_BG_rad():
     print("Done")
 
 
+def plot_parameter_distribution(exp_type: str="tl_fsm-13"):
+    df = pd.read_csv(os.path.join(PROJECT_ROOT, f"results/sims/result_{exp_type}.csv"))
+    df.dropna(inplace=True)
+    # 2) List your parameter columns
+    params = ["param_0","param_1","param_2","param_3","param_4","param_5","param_6"]
 
+    # 3) Compute sample mean and standard deviation
+    means = df[params].mean()
+    stds  = df[params].std()
+
+    # 4) Plot a 3×3 grid of histograms
+    fig, axes = plt.subplots(3, 3, figsize=(15, 10))
+    axes = axes.flatten()
+
+
+    param_names = ['rho_prime', 'E_cb', 'E_loc', 's', 'b', 'alpha', 'holes']
+    for idx, param in enumerate(params):
+        ax = axes[idx]
+        ax.set_xscale('log')
+        data = df[param]
+        # Histogram
+        lo, hi = BOUNDS_FADING[idx]
+        bins = np.logspace(np.log10(lo), np.log10(hi), 30)
+        ax.hist(data, bins=bins, alpha=0.7, edgecolor='black')
+        
+        # Mean line
+        mu = means[param]
+        sigma = stds[param]
+        ax.axvline(mu, color='red', linestyle='--', linewidth=2, label=f"Mean = {mu:.3e}")
+        # ±1σ shading
+        ax.axvspan(mu - sigma, mu + sigma, color='red', alpha=0.2, label=f"±1σ ({sigma:.3e})")
+
+        ax.set_title(param_names[idx])
+        ax.legend()
+        ax.set_xlim(BOUNDS_FADING[idx][0], BOUNDS_FADING[idx][1])
+        
+    
+    # Remove extra subplot(s)
+    for j in range(len(params), len(axes)):
+        fig.delaxes(axes[j])
+
+    fig.suptitle(f"Parameter distribution for {exp_type } experiment", fontsize=18)
+    plt.tight_layout()
+
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/parameter_distribution_{exp_type}.png")
+
+    plt.show()
+    print("Parameters:")
+
+def plot_parameter_distribution_mse(exp_type: str="tl_fsm-13"):
+    df = pd.read_csv(os.path.join(PROJECT_ROOT, f"results/sims/result_{exp_type}.csv"))
+    df.dropna(inplace=True)
+    params = ["param_0","param_1","param_2","param_3","param_4","param_5","param_6"]
+    param_names = ['rho_prime', 'E_cb', 'E_loc', 's', 'b', 'alpha', 'holes']
+
+    means = df[params].mean()
+    stds  = df[params].std()
+
+    fig, axes = plt.subplots(3, 3, figsize=(15, 10))
+    axes = axes.flatten()
+
+    for idx, param in enumerate(params):
+        ax = axes[idx]
+        ax.set_xscale('log')
+
+        data = df[param].values
+        mse  = df['mse'].values    # ← make sure your DataFrame has an 'MSE' column
+
+        # build log‐spaced bins between your desired bounds
+        lo, hi = BOUNDS_FADING[idx]
+        bins = np.logspace(np.log10(lo), np.log10(hi), 20)
+
+        # 1) draw the histogram of counts
+        ax.hist(data, bins=bins, alpha=0.7, edgecolor='black')
+        ax.set_xlim(lo, hi)
+
+        # 2) compute bin centres
+        centers = (bins[:-1] + bins[1:]) / 2
+
+        # 3) assign each point to a bin
+        which_bin = np.digitize(data, bins) - 1  # now 0 … len(bins)-2
+
+        # 4) compute mean MSE in each bin
+        mean_mse_per_bin = []
+        for bin_idx in range(len(bins)-1):
+            sel = mse[which_bin == bin_idx]
+            mean_mse_per_bin.append(sel.mean() if len(sel) else np.nan)
+        mean_mse_per_bin = np.array(mean_mse_per_bin)
+
+        # 5) plot mean‐MSE dots on a twin‐y axis
+        ax2 = ax.twinx()
+        ax2.scatter(centers, mean_mse_per_bin,
+                    color='C1', marker='o', s=50, zorder=3,
+                    label='mean MSE')
+        ax2.set_ylabel("mean MSE", color='C1')
+        ax2.tick_params(axis='y', labelcolor='C1')
+        ax2.set_yscale('linear')
+
+        # 6) overlay mean ±1σ of the parameter on the histogram
+        mu    = means[param]
+        sigma = stds[param]
+        ax.axvline(mu, color='red', linestyle='--', linewidth=2,
+                   label=f"μ = {mu:.3e}")
+        ax.axvspan(mu - sigma, mu + sigma, color='red', alpha=0.2,
+                   label=f"±1σ = {sigma:.3e}")
+
+        ax.set_title(param_names[idx])
+        ax.legend(loc='upper left')
+
+    # remove empty axes
+    for j in range(len(params), len(axes)):
+        fig.delaxes(axes[j])
+
+    fig.suptitle(f"Parameter & mean‑MSE distribution for {exp_type}", fontsize=18)
+    fig.tight_layout(rect=[0,0,1,0.96])
+
+    plt.savefig(f"{PROJECT_ROOT}/results/plots/parameter_distribution_{exp_type}.png")
+    plt.show()
+
+plot_parameter_distribution_mse(exp_type="tl_clbr")
 
 
 @hydra.main(version_base=None, config_path=CONFIG_DIR, config_name="config_fp")

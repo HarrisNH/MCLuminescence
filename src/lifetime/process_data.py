@@ -47,7 +47,7 @@ def plot_iso_data():
     df['time'] = pd.to_numeric(df['time'], errors='coerce')
     df['L']    = pd.to_numeric(df['L'],    errors='coerce')
     df['L'] = df['L']/1.52
-    df = df[df["exp_no"]!=0]
+    #df = df[df["exp_no"]!=0]
     # Start the figure
     plt.figure(figsize=(8,6))
 
@@ -58,7 +58,7 @@ def plot_iso_data():
 
     # Log‐scale the x‐axis
     plt.xscale('log')
-
+    plt.xlim(0,1e4)
     # Labels, title, grid
     plt.xlabel('Time (s)')
     plt.ylabel('Electron trap ratio')
@@ -99,8 +99,8 @@ def plot_TL_data():
     plt.savefig(f"{PROJECT_ROOT}/results/plots/TL_exp_0.25K_per_Gy.png")
     plt.show()
 
-
+plot_iso_data()
 extract_data_TL("CLBR")
 plot_TL_data()
-plot_iso_data()
+
 extract_data_TL_iso(L0=1.52)
