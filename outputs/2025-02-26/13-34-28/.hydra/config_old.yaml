@@ -1,0 +1,21 @@
+physics:
+  E: 1.2
+  k_b: 8.617e-05
+  alpha: 5.02*10**7
+exp_type:
+  name: non_isothermal
+  T_start: 0
+  A: 0.2
+  B: 1000000000000.0
+  rho_prime: 0.0003
+  sims: 1
+  N0: 1000000000.0
+  s_tun: 1000000000000.0
+  distance: 2
+  dr_prime: 0.02
+  dt: 1
+  T_rate:
+  - 0.1
+  T_end: 1000
+setup:
+  A_self_calc: 1

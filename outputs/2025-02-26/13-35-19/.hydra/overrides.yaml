@@ -1,0 +1,3 @@
+- exp_type.dt=1
+- exp_type.T_rate=[0.1,1,5,10,20]
+- exp_type.sims=10

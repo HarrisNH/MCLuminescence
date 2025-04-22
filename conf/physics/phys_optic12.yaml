@@ -1,9 +1,0 @@
-name: phys_optic19
-E: [1.2] #eV
-k_b: [8.617e-5] #m2 kg s-2 K-1
-alpha: [5.02e7] #m^-1 JUST A GUESS
-s_tun: [1e12] #from paper
-rho_prime: [3e-4] #from Mayank12Fig7
-A:  [1,10,100,1000] #s^-1 from Mayank12Fig7
-B: [1e12] #s^-1
-A_self_calc: [0]
