@@ -28,7 +28,7 @@ def initialize_runs(cfg):
     runs = {}
     for i in range(max_length):
         run_dict = {}
-        # For each category (exp_type_fp, physics_fp, setup) create a sub-dictionary.
+        # For each category (exp_type_fp, physics_fp) create a sub-dictionary.
         for sub_name, sub_dict in configs.items():
             sub_run = {}
             for k, v in sub_dict.items():
@@ -44,18 +44,9 @@ def initialize_runs(cfg):
                     sub_run[k] = extended_list[i]
                 else:
                     sub_run[k] = v
-            # Convert the sub-run dictionary into an OmegaConf object
             run_dict[sub_name] = OmegaConf.create(sub_run)
-        # Convert the run dictionary into an OmegaConf object so that dot access works.
         runs[i] = OmegaConf.create(run_dict)
     return runs
-
-
-def rho_func(cfg):
-    mc = cfg.exp_type_fp
-    phys = cfg.physics_fp
-    rho = mc.rho_prime*(3/(4*np.pi)*phys.alpha**3)
-    return rho
 
 def initialize_box_bg(cfg,e_ratio_start=0):
     """
@@ -117,6 +108,12 @@ def initialize_box(cfg):
     holes = (np.random.rand(holes_n, 3)) * scaling_b
     print(f"Initialized {e} electrons and {holes_n} holes (with boundary)")
     return electrons, holes, [box_l,box_w,box_h]
+
+def rho_func(cfg):
+    mc = cfg.exp_type_fp
+    phys = cfg.physics_fp
+    rho = mc.rho_prime*(3/(4*np.pi)*phys.alpha**3)
+    return rho
 
 def calc_distances(electrons: np.array, holes: np.array):
     """
@@ -184,7 +181,11 @@ def lifetime_fading(cfg,distances, T=0):
     k_cb = phys.s * np.exp(-phys.E_cb / (phys.k_b * T))
 
     # Localized tunnelling rate: b * exp(-E_loc / (phys.k_b * T) - phys.alpha * distances)
-    k_tun = phys.b * np.exp(-phys.E_loc / (phys.k_b * T) - phys.alpha * distances)
+    if np.random.rand(1) > 0.5:
+        k_tun = phys.b * np.exp(-phys.E_loc_1 / (phys.k_b * T) - phys.alpha * distances)
+    else: 
+        k_tun = phys.b * np.exp(-phys.E_loc_2 / (phys.k_b * T) - phys.alpha * distances)
+
 
     # Total recombination rate is sum of the two channels
     rate = k_cb + k_tun
@@ -444,11 +445,14 @@ def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = F
                             #Handle recombination event
                             distances, electrons, holes,hole_index,min_distances,_,_,_ = recomber(run_cfg,
                                 recombination,electrons,holes,hole_index,distances,min_distances,timebin[i])
-                            
+                            if np.random.rand(1) < phys.Retrap:
+                                electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
+                                distances = recalc_distances(electrons, holes,distances)
+                                min_distances, hole_index = min_distance(distances)
                             #Recalculate waiting times:
-                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                             lifetime = lifetime_fading(run_cfg, min_distances,T)
                             recombination = np.random.exponential(lifetime)
+                            dt_filling = filling_time(run_cfg,electrons.shape[0],mc.N_e,D)
                                                 # Record the current electron ratio and simulation time.
                         e_ratio_current = electrons.shape[0] / mc.N_e
 
@@ -558,14 +562,6 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
                     plot_data[k]["ratios"] = sim_ratios
                     if len(obs_times)!= 0:
                         print(f"Sim ran for {timebin[i-1]} but real experiment ran for {obs_times[-1]} with {electrons.shape[0]} electrons, loop  {i}")
-                        
-    
-                    #Calculate MSE
-                    #e_ratio_end = electrons.shape[0]/mc.N_e
-                    #e_ratio_observed = lab_cfg[lab_cfg["exp_no"]==k]["L"]
-                    #print(e_ratio_end-lab_cfg.Fill[k])
-                    
-                    #SE.append((e_ratio_end-lab_cfg.L[k])**2)
             MSE = np.mean(SE)
             R2 = 1 - (np.sum(SE)/np.sum(TSS))
             #print(f"R2 is {R2}")
@@ -589,10 +585,10 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
 
 def printer(run_cfg, avgER, MSE):
     print(f"""absError: {avgER}, MSE: {MSE} with params: 
-        rho_prime = {run_cfg.exp_type_fp.rho_prime}, E_cb = {run_cfg.physics_fp.E_cb}, 
-        E_loc = {run_cfg.physics_fp.E_loc}, s = {run_cfg.physics_fp.s}, b = {run_cfg.physics_fp.b}, 
-        alpha = {run_cfg.physics_fp.alpha},holes= {run_cfg.exp_type_fp.holes}""")
-    print('\033[5A')
+        rho_prime = {run_cfg.exp_type_fp.rho_prime}, E_cb = {run_cfg.physics_fp.E_cb}, D0 = {run_cfg.physics_fp.D0}, 
+        E_loc_1 = {run_cfg.physics_fp.E_loc_1},E_loc_2 = {run_cfg.physics_fp.E_loc_2}, s = {run_cfg.physics_fp.s}, b = {run_cfg.physics_fp.b}, 
+        alpha = {run_cfg.physics_fp.alpha},holes= {run_cfg.exp_type_fp.holes}, P_retrap = {run_cfg.physics_fp.Retrap},""")
+    print('\033[5A\033[5A')
             
 
 

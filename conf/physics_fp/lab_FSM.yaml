@@ -5,12 +5,11 @@ k_b: 8.617343e-5 #Boltzmann constant
 E: 1.2 # [eV]
 s: 1e13 #[s^-1] attempt to escape frequncey or lattice vibration frequency (what is difference with b) Pagonis17 uses 3e15
 D: 0.092 #Gy/s (used approx 0.023 K/Gy/0.25 K/s) approxsame as 1,2,3Gy/ka
-D0: 400.35 #estimated in excel 
+D0: 111.35 #estimated in excel 
 rho_trap: 1e22 #m^-3 Density of traps
 L0: 1.52 #from CLBR_IR50 ISO 1.52 is important
 E_cb: 1.8 # [eV] conduction-band trap depth (full barrier for thermal release)
 E_loc: 1.4 # [eV] excited‑state level below conduction band for tunnelling
-E_loc_1: 1.4 # [eV] excited‑state level below conduction band for tunnelling
-E_loc_2: 1.4
-Retrap: 0.5
+
+
 #FSM = 820- 900

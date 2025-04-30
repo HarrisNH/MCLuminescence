@@ -15,12 +15,15 @@ RUNS = 5
 # Bounds for the "fading" mode: [rho_prime, E_cb, E_loc, s, b, alpha, holes]
 BOUNDS_FADING = [
     (1e-8, 1e-3),  # rho_prime
-    (0.8,   2.2),  # E_cb
-    (0.5,   1.8),  # E_loc
+    (1.9,   2.4),  # E_cb
+    (1.2,   1.7),  # E_loc_1
+    (1,   1.5),  # E_loc_2
+    (100,   400), #D0
     (1e12, 1e14),  # s
     (1e10, 1e13),  # b
     (1e9,  5e10),  # alpha
-    (1e2,    750)  # holes
+    (1e2,    750),  # holes
+    (0,1) # retrapping probability
 ]
 
 # Select bounds based on experiment type
@@ -38,15 +41,19 @@ def sim_starter(cfg, params, exp_type, PLOT:bool = False):
     #     cfg.physics_fp.E_cb = float(params[1])
     #     MSE = fc.sim_lab_TL_residuals_iso(cfg,PLOT=PLOT)
     #     return MSE
-    rho_prime, E_cb, E_loc, s, b, alpha, holes = params
+    rho_prime, E_cb, E_loc_1,E_loc_2, D0, s, b, alpha, holes,retrap = params
     # Update the configuration with the new parameters
     cfg.exp_type_fp.rho_prime = float(rho_prime)
     cfg.physics_fp.E_cb = float(E_cb)
-    cfg.physics_fp.E_loc = float(E_loc)
+    cfg.physics_fp.E_loc_1 = float(E_loc_1)
+    cfg.physics_fp.E_loc_2 = float(E_loc_2)
+    cfg.physics_fp.D0 = float(D0)
     cfg.physics_fp.s = float(s)
     cfg.physics_fp.b = float(b)
     cfg.physics_fp.alpha = float(alpha)
-    cfg.exp_type_fp.holes = float(holes)     
+    cfg.exp_type_fp.holes = float(holes)    
+    cfg.physics_fp.Retrap = float(retrap)
+
     if exp_type == "iso":
         MSE = fc.sim_lab_TL_residuals_iso(cfg,PLOT=PLOT)
     elif exp_type == "tl_clbr":
@@ -66,8 +73,8 @@ def main(cfg: DictConfig) -> None:
             result = differential_evolution(objective, BOUNDS, args=(cfg,), 
                                             strategy='randtobest1bin', 
                                             init="sobol", mutation=0.5, recombination=0.3,
-                                             maxiter = 5, popsize=10, 
-                                            workers=1, tol=1e-7, disp=True, polish=True)
+                                             maxiter = 7, popsize=15, 
+                                            workers=5, tol=1e-7, disp=True, polish=True)
             
             # Print the result
             print("Optimal parameters found:", result.x)

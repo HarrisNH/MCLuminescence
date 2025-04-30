@@ -5,7 +5,7 @@ defaults:
 
 # TLiso09 TL12 IsoBG 
 # phys_old_noniso phys_optic12 phys_optic19 phys_static BG_basic
-  - setup: setup #manual setup such as use A_isoth or self calculate based on other parameters
+# - setup: setup #manual setup such as use A_isoth or self calculate based on other parameters
 
 hydra:
   job:
