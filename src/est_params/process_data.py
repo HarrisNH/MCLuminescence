@@ -39,13 +39,10 @@ def extract_data_TL_iso(L0):
 
 def plot_iso_data():
     df = pd.read_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IR50_ISO_plot.csv")  # if you need to load it
-    
     # Make sure the relevant columns are numeric
     df['time'] = pd.to_numeric(df['time'], errors='coerce')
     df['L']    = pd.to_numeric(df['L'],    errors='coerce')
     df['L'] = df['L']/1.52
-    #df = df[df["exp_no"]!=0]
-    # Start the figure
     plt.figure(figsize=(8,6))
 
     # Loop over each temperature group
@@ -99,5 +96,4 @@ def plot_TL_data():
 plot_iso_data()
 extract_data_TL("CLBR")
 plot_TL_data()
-
 extract_data_TL_iso(L0=1.52)

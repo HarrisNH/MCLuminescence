@@ -12,7 +12,7 @@ duration: 1e14 #[s] 1000000 years
 sims: 50
 electrons: [0] #number of electrons
 holes: [3000] #number of traps inside box
-N_e: [200] #max number of electron traps #not sure about this value
+N_e: [200] #max number of electron traps 
 
 #box # 
 rho_prime: 1e-6 #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
@@ -29,4 +29,3 @@ steps: 50000
 distance_plot: False
 x_lim: 10
 bin_size: 0.1 #This is the size for our bins in histogram plot
-# (Basically just how we aggreagate on the x-axis)
