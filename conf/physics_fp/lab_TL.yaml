@@ -6,9 +6,9 @@ s: 1e13 #[s^-1] attempt to escape frequncey or lattice vibration frequency
 D: 0.092 #Gy/s (used approx 0.023 K/Gy/0.25 K/s) 
 D0: 400.35 #estimated in excel 
 rho_trap: 1e22 #m^-3 Density of traps
-L0: 1.52 #from CLBR_IR50 ISO
+#L0: 1.52 #from CLBR_IR50 ISO
 E_cb: 1.8 # [eV] conduction-band trap depth (full barrier for thermal release)
-E_loc: 1.4 # [eV] excited‑state level below conduction band for tunnelling
+#E_loc: 1.4 # [eV] excited‑state level below conduction band for tunnelling
 E_loc_1: 1.4 # [eV] 1. ground to excited‑state trap depth below conduction band for tunnelling
 E_loc_2: 1.4 # [eV] 2. ground to excited‑state trap depth below conduction band for tunnelling
 Retrap: 0.5

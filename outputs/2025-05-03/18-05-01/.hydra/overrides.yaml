@@ -1,0 +1,3 @@
+- +plots=[TL,iso]
+- exp_type_fp.duration=2e5
+- +tag=myExperiment

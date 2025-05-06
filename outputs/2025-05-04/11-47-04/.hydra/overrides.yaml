@@ -1,0 +1,4 @@
+- +plots=TL_norm
+- physics_fp.D=0.92
+- +tag=TLwithDose_emptystart
+- exp_type_fp.e_ratio_start=0.05

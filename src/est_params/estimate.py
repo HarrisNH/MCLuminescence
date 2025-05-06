@@ -10,8 +10,9 @@ import os
 
 # Choose the experiment mode and run type:
 EXP_TYPE = "tl_clbr"  # "iso", "tl_clbr", "tl_fsm-13"
-RUN_TYPE = "Train"
+RUN_TYPE = "Tra3in"
 RUNS = 15
+
 # Bounds for the "fading" mode: [rho_prime, E_cb, E_loc, s, b, alpha, holes]
 BOUNDS= [
     (1e-8, 1e-3),  # rho_prime
@@ -51,8 +52,8 @@ def sim_starter(cfg, params, exp_type, PLOT:bool = False):
         MSE = fc.sim_lab_TL_residuals(cfg, lab_data="CLBR_IRSL50_0.25KperGy",PLOT=PLOT)
     elif exp_type == "tl_fsm-13":
         MSE = fc.sim_lab_TL_residuals(cfg, lab_data="FSM-13_IRSL50_0.25KperGy",PLOT=PLOT)
-    else:
-        MSE = fc.sim_lab_TL_residuals_fading(cfg)  
+    else: 
+        raise ValueError(f"Unknown experiment type: {exp_type}")
     return MSE
  
 
@@ -74,7 +75,7 @@ def main(cfg: DictConfig) -> None:
             columns = [f"param_{i}" for i in range(len(result.x))] + ["mse"]
             data    = [list(result.x) + [float(result.fun)]]
             df      = pd.DataFrame(data, columns=columns)
-            out_path = os.path.join(PROJECT_ROOT, f"results/sims/result_{EXP_TYPE}.csv")
+            out_path = os.path.join(PROJECT_ROOT, f"results/lab_sims/result_{EXP_TYPE}.csv")
             prev_results = pd.read_csv(out_path)
             all_results = pd.concat([df,prev_results])
             all_results.to_csv(out_path, index=False)
@@ -86,17 +87,10 @@ def main(cfg: DictConfig) -> None:
                 sim_starter(cfg, result.x, exp_type=EXP_TYPE, PLOT=True)
     elif RUN_TYPE == "Opt":
         print("Just using optimal parameters from previously saved run")
-        result = pd.read_csv(os.path.join(PROJECT_ROOT, f"results/sims/result_{EXP_TYPE}.csv"))
+        result = pd.read_csv(os.path.join(PROJECT_ROOT, f"results/lab_sims/result_{EXP_TYPE}.csv"))
         result_best = result[result["mse"]==result.mse.min()]
-        result_mean = np.mean(result,axis=0)
         new_params = np.array(result_best.iloc[0].iloc[0:-1].values)
         sim_starter(cfg, new_params, exp_type=EXP_TYPE, PLOT=True)
-    else:
-        print("Just using optimal parameters from previously saved run")
-        result = pd.read_csv(os.path.join(PROJECT_ROOT, f"results/sims/result_{EXP_TYPE}.csv"))
-        for i in range(1, len(result.columns)-1):
-            new_params = np.array(result.iloc[i].iloc[0:-1].values)
-            sim_starter(cfg, new_params, exp_type=EXP_TYPE, PLOT=True)
     return result
 
 if __name__ == "__main__":

@@ -1,0 +1,31 @@
+exp_type_fp:
+  name: TL
+  exp_type: lab_TL
+  sims: 1
+  electrons: 100
+  holes: 100
+  N_e: 100
+  rho_prime: 0.0001
+  d: 8.3e-09
+  boundary_factor: 1.2
+  steps: 20000
+  distance_plot: false
+  x_lim: 10
+  bin_size: 0.1
+physics_fp:
+  name: basic
+  alpha: 9000000000.0
+  b: 1000000000000.0
+  k_b: 8.617343e-05
+  s: 10000000000000.0
+  D: 0.092
+  D0: 400.35
+  rho_trap: 1.0e+22
+  E_cb: 1.8
+  E_loc_1: 1.4
+  E_loc_2: 1.4
+  Retrap: 0.5
+task: train
+exp: tl_clbr
+gens: 2
+pop: 2

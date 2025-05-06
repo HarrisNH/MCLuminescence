@@ -1,21 +1,20 @@
 name: TL
 exp_type: TL
 T_start: [0] #[C] celsius
-T_end: [800]
+T_end: [1000]
 T_rate: [0.1,1,5,20]
 #time
-duration: 10 #[s]
-
+duration: [8000,800,160,40] #[s]
+max_dt: 1
 #sims
 sims: 2
-electrons: [1000] #[250] #number of electrons
-holes: [1000] #[10000] #number of holes inside box (remeber adds someone just outside boundary)
+holes: 2000 #number of traps inside box
+electrons: 1000
+N_e: 2000 #electron_hole_traps
+e_ratio_start: 1
 
 #box # 
 rho_prime: 3e-4 #use rho_prime and alpha (from phys config) to set box size. Taken from Huntley2006 and Jain 2012
-box_l: [4e-7] 
-box_w: [4e-7] 
-box_h: [4e-7] 
 boundary_factor: [1.2]
 
 #steps
@@ -23,6 +22,5 @@ steps: 20000
 
 #plots
 distance_plot: False
-x_lim: 10
-bin_size: 1 #This is the size for our bins in histogram plot
-# (Basically just how we aggreagate on the x-axis)
+x_lim: 800
+bin_size: 1

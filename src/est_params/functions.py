@@ -79,35 +79,6 @@ def initialize_box_bg(cfg,e_ratio_start=0):
     holes = (np.random.rand(holes_n, 3)) * scaling_b
     return electrons, holes, [box_l,box_w,box_h]
 
-def initialize_box(cfg):
-    """
-    Initialize the electrons and holes in the box centered at the origin.
-    """
-    mc = cfg.exp_type_fp
-    e = int(mc.electrons)
-    rho = rho_func(cfg) #using rho prime and alpha
-    
-    box_l, box_w, box_h = mc.d,mc.d,mc.d
-    box_volume = box_l*box_w*box_h
-    h = int(rho*box_volume)
-
-    b_factor = mc.boundary_factor  # boundary factor
-    box_l_b = box_l * b_factor
-    box_w_b = box_w * b_factor
-    box_h_b = box_h * b_factor
-    box_volume = box_l * box_w * box_h
-    box_volume_b = box_l_b * box_w_b * box_h_b
-    scaling = np.array([box_l, box_w, box_h])
-    electrons = (np.random.rand(e, 3)) * scaling
-    holes_density = h / (box_l * box_w * box_h)
-    b_volume = box_volume_b - box_volume
-    holes_boundary_n = int(holes_density * b_volume)
-    holes_n = h + holes_boundary_n
-    scaling_b = np.array([box_l_b, box_w_b, box_h_b])
-    holes = (np.random.rand(holes_n, 3)) * scaling_b
-    print(f"Initialized {e} electrons and {holes_n} holes (with boundary)")
-    return electrons, holes, [box_l,box_w,box_h]
-
 def rho_func(cfg):
     mc = cfg.exp_type_fp
     phys = cfg.physics_fp
@@ -133,17 +104,6 @@ def min_distance(distances,distances_all=0,electrons_new_d=0):
         min_indices = 0
     return min_dist, min_indices
 
-def lifetime_thermal(cfg, distances,temp=0):
-    """
-    Calculate the probability of tunneling for each electron-hole pair.
-    Formula: b * exp(-(etha + alpha * distances))
-    Temp input is in celsuis, then converted to kelvin inside function
-    """
-    mc = cfg.exp_type_fp
-    phys = cfg.physics_fp
-    xi = phys.E / (phys.k_b * (temp))
-    lifetime = 1/phys.b * np.exp(xi + phys.alpha * distances)
-    return lifetime
 
 def lifetime_tunneling(cfg,distances):
     mc = cfg.exp_type_fp
@@ -151,17 +111,6 @@ def lifetime_tunneling(cfg,distances):
     lifetime = 1/phys.b*np.exp(phys.alpha*distances)
     return lifetime
 
-def lifetime_thermal(cfg, distances,T=0):
-    """
-    Calculate the probability of tunneling for each electron-hole pair.
-    Formula: b * exp(-(etha + alpha * distances))
-    Temp input should be in kelvin
-    """
-    mc = cfg.exp_type_fp
-    phys = cfg.physics_fp
-    xi = phys.E / (phys.k_b * T)
-    lifetime = 1/phys.b * np.exp(xi + phys.alpha * distances)
-    return lifetime
 
 def lifetime_fading(cfg,distances, T=0):
     """ Compute the combined thermal (conduction-band) and localized (tunnelling)
@@ -317,26 +266,6 @@ def analy_TL_iso(cfg, timebin,i):
     phys = cfg.physics_fp
     ns = mc.electrons*np.exp(-mc.rho_prime*np.log(1.8*phys.s*timebin)**3)   
     return ns                 
-
-               
-def results_temp(run_cfg, Lum, timebin, electrons, Lum_sec, Lum_celsius, loop):
-    i,j,key = loop
-    mc = run_cfg.exp_type_fp
-    time_passed = int(timebin[i-2])
-    x_ax_time = np.arange(0,time_passed,mc.bin_size)
-    x_ax_celsius = np.arange(0,time_passed*mc.T_rate,mc.bin_size)
-    print(f"Simulation {j} done and we simulated across {time_passed} seconds with temp_increase of {mc.T_rate}/s")
-    print(f"The ratio of electrons that recombined is {1-electrons/mc.electrons}")
-    for idx, x_t in enumerate(x_ax_time): #This loop bins luminecscense data for each temperature (decided by bin size)
-        Lum_index_sec = np.where((timebin[:i] <= (x_t + mc.bin_size)) & (timebin[:i] > x_t))
-        Lum_sec[idx, j,key] = np.sum(Lum[:i, j,key][Lum_index_sec])
-    for idx, x_t in enumerate(x_ax_celsius):
-        Lum_index_cel = np.where((timebin[:i] <= (x_t + mc.bin_size)/mc.T_rate) & (timebin[:i] > x_t/mc.T_rate))
-        Lum_celsius[idx,j,key] = np.sum(Lum[:i, j,key][Lum_index_cel])
-    print(f"Total luminescence for sim {j} is {np.sum(Lum[:i, j,key])}")
-    print(f"Mean luminescence per second for sim {j} is {np.mean(Lum_sec[:, j,key])}")
-    print(i / mc.steps)
-    return x_ax_celsius, Lum_celsius
 
 def sim_lab_TL_residuals(run_cfg, lab_data:str="CLBR_IRSL50_0.25KperGy",PLOT = False):
             mc = run_cfg.exp_type_fp
@@ -522,7 +451,7 @@ def sim_lab_TL_residuals_iso(run_cfg, lab_data:str = "CLBR_IR50_ISO", PLOT:bool 
 
                 df = pd.DataFrame(rows)
                 # write to CSV
-                df.to_csv(f"{PROJECT_ROOT}/results/sims/iso_data.csv", index=False)
+                df.to_csv(f"{PROJECT_ROOT}/results/lab_sims/iso_data.csv", index=False)
                 plot_e_ratio_timeseries_iso(lab_cfg, df,lab_data)
             return MSE
 
@@ -687,145 +616,3 @@ def plot_e_ratio_timeseries_iso(lab_cfg, df,exp_type,plot_type = "slim"):
             frameon=True)
 
     plt.savefig(f"{PROJECT_ROOT}/results/plots/lab/{exp_type}_{plot_type}.png")
-
-
-
-def sim_bg(run_cfg, Lum, x_ax, electron_ratio,key,exp_list):
-            mc = run_cfg.exp_type_fp
-            phys = run_cfg.physics_fp
-            for j in range(mc.sims):
-                electrons, holes,box_dim,e_max = initialize_box_bg(run_cfg)
-                e_timer = np.array([])
-                dt_filling = filling_time(run_cfg,electrons.shape[0],e_max,phys.D)
-                timebin = np.zeros(mc.steps)           
-                distances = calc_distances(electrons, holes)
-                if distances.size != 0:
-                    min_distances, hole_index = min_distance(distances)
-                
-                    lifetime = lifetime_tunneling(run_cfg, min_distances) 
-                    recombination = np.random.exponential(lifetime)
-                else:
-                    recombination = np.array([])     
-                i=0
-
-                exp_duration = dt_filling*mc.steps*0.6 #to ensure that array is big enough
-                print_param = 100
-                fill_counter = 0
-                while timebin[i-1]<mc.duration:
-
-                    dt_recomb = np.min(recombination - e_timer[:recombination.shape[0]]) if recombination.size > 0 else dt_filling-t0 #check this timebin subtraction
-                    dt = np.min((dt_recomb,dt_filling))
-                    if dt == dt_filling-t0:
-                        timebin[i] = timebin[i - 1] + dt
-
-                        fill_counter+=1
-                        electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
-                        e_timer = np.append(e_timer,timebin[i])
-                        distances = recalc_distances(electrons, holes,distances)
-                        min_distances, hole_index = min_distance(distances)
-                        lifetime = lifetime_tunneling(run_cfg, min_distances)
-                        recombination = np.random.exponential(lifetime)
-                        dt_filling = filling_time(run_cfg,electrons.shape[0],e_max,phys.D)
-
-                    elif dt == dt_recomb:
-                        dt = np.max((dt,0))
-                        timebin[i] = timebin[i - 1] + dt
-                        dt_filling = filling_time(run_cfg,electrons.shape[0],e_max,phys.D)
-                        #Handle recombination event
-                        distances, electrons, holes,hole_index,min_distances,recombination,Lum[i,j,key],e_timer = recomber(run_cfg,
-                            recombination,electrons,holes,hole_index,distances,min_distances,timebin[i],e_timer)
-                        
-                        lifetime = lifetime_tunneling(run_cfg, min_distances)
-                        recombination = np.random.exponential(lifetime)
-                    electron_ratio[i,j,key] = electrons.shape[0]/e_max
-
-                    if i%print_param  == 0:
-                        if i!= 0:
-                            print("\033[F\033[F\033[F\033[F\033[F\033[F", end="")  # Moves the cursor up 
-
-                        print(f"Step {i+1} of {mc.steps} | Sim {j+1} of {mc.sims} | Experiment {key} of {exp_list}")
-                        print(f"Trap filling ratio is {electron_ratio[i,j,key]:.2f}", flush=True)
-                        print(f"Lum in last {print_param} steps is {np.sum(Lum[i-print_param:i,j,key])}", flush=True)
-                        print(f"{timebin[i]/(3600*24*365*1000):.2f} thousand years passed of max {exp_duration/(3600*24*365*1000):.2f}", flush=True)
-                        print(f"Time passed in last {print_param} steps: {(timebin[i] - timebin[i-print_param])/(3600*24*365*1000):.2f} thousand years", flush=True)
-                        print(f"Filling events in last {print_param} steps: {fill_counter}", flush=True)
-                        fill_counter= 0
-                    if electron_ratio[i,j,key] > 0.98:
-                        break
-                    i+=1
-                print(f"Simulation {j} done and we simulated across {timebin[i-1]/(3600*24*365*1000)} thousand years")
-
-                x_ax[:,j,key] = timebin
-            return x_ax, Lum, electron_ratio
-
-def sim_lab_TL(run_cfg, Lum, x_ax, electron_ratio,key,exp_list):
-            mc = run_cfg.exp_type_fp
-            cfg_experiments  = pd.read_csv(f"{PROJECT_ROOT}/data/processed/CLBR_IRSL50_0.25KperGy.csv")
-
-            for j in range(mc.sims):
-                electrons, holes,box_dim,e_max = initialize_box_bg(run_cfg)
-                dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
-                timebin = np.zeros(mc.steps)           
-                distances = calc_distances(electrons, holes)
-                if distances.size != 0:
-                    min_distances, hole_index = min_distance(distances)
-                
-                    #find lifetime of all electrons
-                    lifetime = lifetime_tunneling(run_cfg, min_distances) 
-                    recombination = np.random.exponential(lifetime)
-                else:
-                    recombination = np.array([])     
-                i=0
-                exp_duration = dt_filling*mc.steps*0.6 #to ensure that array is big enough
-                print_param = 50
-                fill_counter = 0
-                T = mc.T_start+273.15
-                T_rate = (mc.T_end-mc.T_start)/mc.duration
-                while timebin[i-1]<mc.duration:
-                    #Time step is decided by time until next recombination or filling event
-                    dt_recomb = np.min(recombination) if recombination.size > 0 else dt_filling
-                    dt = np.min((dt_recomb,dt_filling-t0))#2C max step
-                    T = T + dt*T_rate
-                    if dt == dt_filling-t0:
-                        t0 = 0
-                        timebin[i] = timebin[i - 1] + dt
-                        fill_counter+=1
-                        electrons, holes = add_electron(run_cfg,box_dim,electrons,holes)
-                        e_timer = np.append(e_timer,timebin[i])
-                        distances = recalc_distances(electrons, holes,distances)
-                        min_distances, hole_index = min_distance(distances)
-                        lifetime = lifetime_thermal(run_cfg, min_distances,T)
-                        recombination = np.random.exponential(lifetime)
-                        dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
-                    elif dt == dt_recomb:
-                        dt = np.max((dt,0))
-                        timebin[i] = timebin[i - 1] + dt
-
-                        #Handle recombination event
-                        distances, electrons, holes,hole_index,min_distances,recombination,Lum[i,j,key],e_timer = recomber(run_cfg,
-                            recombination,electrons,holes,hole_index,distances,min_distances,timebin[i],e_timer)
-                        dt_filling = filling_time(run_cfg,electrons.shape[0],e_max)
-
-                        lifetime = lifetime_thermal(run_cfg, min_distances,T)
-                        recombination = np.random.exponential(lifetime)
-                    electron_ratio[i,j,key] = electrons.shape[0]/e_max
-
-                    if i%print_param  == 0:
-                        if i!= 0:
-                            print("\033[F\033[F\033[F\033[F\033[F\033[F\033[F", end="") 
-
-
-                        print(f"Step {i+1} of {mc.steps} | Sim {j+1} of {mc.sims} | Experiment {key} of {exp_list}")
-                        print(f"Trap filling ratio is {electron_ratio[i,j,key]:.2f}", flush=True)
-                        print(f"Lum in last {print_param} steps is {np.sum(Lum[i-print_param:i,j,key])}", flush=True)
-                        print(f"{timebin[i]:.2f} seconds passed of max {exp_duration:.2f}", flush=True)
-                        print(f"Time passed in last {print_param} steps: {(timebin[i] - timebin[i-print_param]):.2f} seconds", flush=True)
-                        print(f"Filling events in last {print_param} steps: {fill_counter}", flush=True)
-                        fill_counter= 0
-                    if electron_ratio[i,j,key] > 0.98:
-                        break
-                    i+=1
-                print(f"Simulation {j} done and we simulated across {timebin[i-1]} thousand years")
-
-                x_ax[:,j,key] = timebin
-            return x_ax, Lum, electron_ratio

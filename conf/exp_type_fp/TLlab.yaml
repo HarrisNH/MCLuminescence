@@ -7,7 +7,7 @@ holes: 100 #number of traps inside box
 N_e: 100 #max number of electron traps #not sure about this value
 
 #box # 
-rho_prime: 0 #1e-7 #use rho_prime and alpha (from phys config) to set box size. 
+rho_prime: 1e-4 #1e-7 #use rho_prime and alpha (from phys config) to set box size. 
 #Rho_prime
 d: 8.3e-9
 #box_l: [4e-7] 

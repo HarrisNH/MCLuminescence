@@ -1,0 +1,4 @@
+- +task=train
+- +exp=tl_clbr
+- +gens=2
+- +pop=2

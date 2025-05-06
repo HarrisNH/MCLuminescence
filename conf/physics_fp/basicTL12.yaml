@@ -2,5 +2,10 @@ name: basic
 alpha: 1.6e9 # [m^-1] tunelling rate constant #Huntley 2006
 b: 1e12 #[s^-1] attempt to tunnel frequency
 k_b: 8.617343e-5 #Boltzmann constant
-E: 1.2 # [eV]
+E_loc_1: 1.2 # [eV]
+E_loc_2: 1.2 # [eV]
+E_cb: 1000
+D0: 400.35 #estimated in excel 
+D: 0
+Retrap: 0.5
 s: 1e12 #[s^-1] attempt to escape frequncey or lattice vibration frequency 
