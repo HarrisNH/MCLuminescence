@@ -1,0 +1,24 @@
+physics_fp:
+  name: basic
+  alpha: 0.1
+  b: 0.1
+  kB: 8.617343e-05
+  E: 1.2
+  s: 0.1
+exp_type_fp:
+  name: TL
+  exp_type: iso
+  T_start: 300
+  T_rate: 0
+  dt: 1
+  duration: 300
+  sims: 10
+  electrons: 300
+  holes: 300
+  box_l: 30
+  box_w: 30
+  box_h: 30
+  distance_plot: true
+setup:
+  A_self_calc:
+  - 1

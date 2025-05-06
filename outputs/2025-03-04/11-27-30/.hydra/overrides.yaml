@@ -1,0 +1,3 @@
+- exp_type=TL_nonisothermal
+- physics=phys_static
+- exp_type.T_end=[1000]

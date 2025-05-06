@@ -1,0 +1,40 @@
+physics_fp:
+  name: basic
+  alpha: 100000000000.0
+  b: 1000000000000.0
+  k_b: 8.617343e-05
+  E: 1.2
+  s: 1000000000000.0
+exp_type_fp:
+  name: TL
+  exp_type: TL
+  T_start:
+  - 0
+  T_end:
+  - 800
+  T_rate:
+  - 0.1
+  - 1
+  - 5
+  dt: 0.01
+  duration: 10
+  sims: 2
+  electrons:
+  - 400
+  holes:
+  - 2000
+  box_l:
+  - 3.0e-05
+  box_w:
+  - 3.0e-05
+  box_h:
+  - 3.0e-05
+  boundary_factor:
+  - 1.2
+  steps: 20000
+  distance_plot: false
+  x_lim: 10
+  bin_size: 1
+setup:
+  A_self_calc:
+  - 1

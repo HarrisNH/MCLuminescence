@@ -1,0 +1,31 @@
+physics:
+  name: phys_dyn_rhoEs
+  E:
+  - 0.8
+  - 0.8
+  - 1.2
+  k_b: 8.617e-05
+  alpha: 50200000.0
+  s_tun:
+  - 10000000000.0
+  - 10000000000.0
+  - 1000000000000.0
+  rho_prime:
+  - 0.0008
+  - 0.0003
+  - 0.0003
+  A: 0.2
+  B: 1000000000000.0
+exp_type:
+  name: TL_rhoEs
+  T_start: 0
+  T_end: 1000
+  T_rate:
+  - 5
+  sims: 2
+  N0: 1000000000.0
+  distance: 2
+  dr_prime: 0.02
+  dt: 0.1
+setup:
+  A_self_calc: 1

@@ -1,0 +1,41 @@
+exp_type_fp:
+  name: TL
+  exp_type: TL
+  T_start:
+  - 0
+  T_end:
+  - 800
+  T_rate:
+  - 0.1
+  - 1
+  - 5
+  - 20
+  duration:
+  - 8000
+  - 800
+  - 160
+  - 40
+  max_dt: 1
+  sims: 2
+  holes: 1000
+  N_e: 1000
+  e_ratio_start: 1
+  rho_prime: 0.0003
+  boundary_factor:
+  - 1.2
+  steps: 20000
+  distance_plot: false
+  x_lim: 800
+  bin_size: 1
+physics_fp:
+  name: basic
+  alpha: 1600000000.0
+  b: 1000000000000.0
+  k_b: 8.617343e-05
+  E_loc_1: 1.2
+  E_loc_2: 1.2
+  E_cb: 1000
+  D0: 400.35
+  D: 0
+  Retrap: 0.5
+  s: 1000000000000.0
